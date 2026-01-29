@@ -12,6 +12,7 @@ public static class CommonHelper
     // Helper Function 
     public static event Action TradeCompleted;
 
+
     public static string GetLocalFilePath()
     {
         // Default domain fallback
