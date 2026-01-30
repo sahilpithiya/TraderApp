@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Drawing;
 using System.Windows.Forms;
+using TraderApps;
 
 namespace ClientDesktop.HelperClass
 {
@@ -115,7 +116,7 @@ namespace ClientDesktop.HelperClass
             }
 
             form.BackColor = White;
-            form.Icon = Properties.Resources.ClientDesktop_Logo;
+            form.Icon = TraderApp.Properties.Resources.TraderApp_Logo;
         }
 
         // 🔹 Apply theme to an entire UserControl (background + grids inside)

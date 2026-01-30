@@ -1,27 +1,36 @@
-﻿using System;
+﻿using ClientDesktop.Models;
+using ClosedXML.Excel;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
+using System;
 using System.Collections.Generic;
+using System.Data;
+using System.Drawing;
+using System.Globalization;
 using System.IO;
 using System.Linq;
-using Newtonsoft.Json;
-using TraderApp.Models;
-using TraderApp.Config; // AESHelper yaha hai
+using System.Net.Http;
+using System.Threading.Tasks;
+using System.Windows.Forms;
+using TraderApps.Config;
+using TraderApps.Helpers;
+using TraderApps.Models;
 
-public static class CommonHelper
+public static class CommonHelper    
 {
     #region Events And Basic Helpers
     // Helper Function 
     public static event Action TradeCompleted;
 
-
     public static string GetLocalFilePath()
     {
         // Default domain fallback
         var domain = SessionManager.ServerListData
-                    .FirstOrDefault(w => w.licenseId.ToString() == SessionManager.LicenseId)?
+                    .FirstOrDefault(w => w.licenseId.ToString() == SessionManager.LicenseId)?   
                     .serverDisplayName ?? "defaultDomain";
 
         // Default folder inside common data folder
-        var folder = Path.Combine(CommonPaths.dataFolder, AESHelper.ToBase64UrlSafe(domain));
+        var folder = Path.Combine(AppConfig.dataFolder, AESHelper.ToBase64UrlSafe(domain));
 
         // Default fileName using userId, fallback if null
         string userIdBase64 = !string.IsNullOrEmpty(SessionManager.UserId)
@@ -42,7 +51,7 @@ public static class CommonHelper
                     .serverDisplayName ?? "defaultDomain";
 
         // Default folder inside common data folder
-        return Path.Combine(CommonPaths.dataFolder, AESHelper.ToBase64UrlSafe(domain));
+        return Path.Combine(AppConfig.dataFolder, AESHelper.ToBase64UrlSafe(domain));
 
     }
 
@@ -164,7 +173,7 @@ public static class CommonHelper
     {
         try
         {
-            string safeFolderPath = Path.Combine(CommonPaths.dataFolder, encryptedFolderName);
+            string safeFolderPath = Path.Combine(AppConfig.dataFolder, encryptedFolderName);
 
             if (!Directory.Exists(safeFolderPath))
                 Directory.CreateDirectory(safeFolderPath);
@@ -251,34 +260,6 @@ public static class CommonHelper
         return null;
     }
 
-    public static List<Position> LoadPositionDataFromCache(string filePath)
-    {
-        try
-        {
-            if (File.Exists(filePath))
-            {
-                string encryptedContent = File.ReadAllText(filePath);
-                string decryptedContent = AESHelper.DecompressAndDecryptString(encryptedContent);
-
-                // Deserialize the cached dictionary
-                var dataDictionary = JsonConvert.DeserializeObject<Dictionary<string, object>>(decryptedContent);
-
-                if (dataDictionary != null && dataDictionary.ContainsKey("position"))
-                {
-                    // Deserialize and return the position list
-                    var positionJson = dataDictionary["position"].ToString();
-                    return JsonConvert.DeserializeObject<List<Position>>(positionJson);
-                }
-            }
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine($"⚠️ Failed to read local backup for position data.\nDetails: {ex.Message}", "Error");
-        }
-
-        return null;
-    }
-
     public static List<HistoryModel> LoadHistoryDataFromCache(string filePath)
     {
         try
@@ -330,34 +311,6 @@ public static class CommonHelper
         catch (Exception ex)
         {
             Console.WriteLine($"⚠️ Failed to read local backup for Position History data.\nDetails: {ex.Message}", "Error");
-        }
-
-        return null;
-    }
-
-    public static List<OrderModel> LoadOrderDataFromCache(string filePath)
-    {
-        try
-        {
-            if (File.Exists(filePath))
-            {
-                string encryptedContent = File.ReadAllText(filePath);
-                string decryptedContent = AESHelper.DecompressAndDecryptString(encryptedContent);
-
-                // Deserialize the cached dictionary
-                var dataDictionary = JsonConvert.DeserializeObject<Dictionary<string, object>>(decryptedContent);
-
-                if (dataDictionary != null && dataDictionary.ContainsKey("order"))
-                {
-                    // Deserialize and return the order list
-                    var orderJson = dataDictionary["order"].ToString();
-                    return JsonConvert.DeserializeObject<List<OrderModel>>(orderJson);
-                }
-            }
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine($"⚠️ Failed to read local backup for order data.\nDetails: {ex.Message}", "Error");
         }
 
         return null;
@@ -536,16 +489,6 @@ public static class CommonHelper
         private const int WM_KEYDOWN = 0x0100;
         private readonly bool _ignoreMdiContainers;
 
-        // List of UserControl types that should NOT trigger close
-        private static readonly Type[] _excludedControls =
-        {
-            typeof(UCChartControl),
-            typeof(UCDetailsControl),
-            typeof(UCMarketWatchControl),
-            typeof(Home),
-            typeof(UCNavigationControl)
-        };
-
         public EscToCloseFilter(bool ignoreMdiContainers = true)
         {
             _ignoreMdiContainers = ignoreMdiContainers;
@@ -564,13 +507,6 @@ public static class CommonHelper
 
                 if (_ignoreMdiContainers && form.IsMdiContainer)
                     return false;
-
-                // Check if the active form contains any excluded controls
-                foreach (var ctrlType in _excludedControls)
-                {
-                    if (ContainsControlOfType(form, ctrlType))
-                        return false;
-                }
 
                 try
                 {
@@ -611,108 +547,6 @@ public static class CommonHelper
     #endregion
 
     #region ExportExcel
-    public static void ExportToExcel(DataGridView dgv, string title, string fileName)
-    {
-        try
-        {
-            string userProfile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
-            string folder = Path.Combine(userProfile, "Downloads");
-
-            if (!Directory.Exists(folder))
-                Directory.CreateDirectory(folder);
-
-            string fullPath = Path.Combine(folder, fileName + ".xlsx");
-
-            int counter = 1;
-            while (File.Exists(fullPath))
-            {
-                fullPath = Path.Combine(folder, $"{fileName} ({counter}).xlsx");
-                counter++;
-            }
-
-            SaveFileDialog save = new SaveFileDialog();
-            save.Filter = "Excel Workbook|*.xlsx";
-            save.Title = "Save Excel File";
-            save.InitialDirectory = folder;
-            save.FileName = Path.GetFileName(fullPath);
-
-            if (save.ShowDialog() != DialogResult.OK)
-                return;
-
-            using (var workbook = new XLWorkbook())
-            {
-                var sheet = workbook.Worksheets.Add("Sheet1");
-                int rowIndex = 1;
-
-                // ---- TITLE ----
-                var titleCell = sheet.Cell(rowIndex, 1);
-                titleCell.Value = title;
-
-                var titleRange = sheet.Range(rowIndex, 1, rowIndex, dgv.Columns.Count);
-                titleRange.Merge();
-                titleRange.Style.Font.Bold = true;
-                titleRange.Style.Font.FontSize = 14;
-                titleRange.Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
-
-                rowIndex += 2;
-
-                // ---- COLUMN HEADERS ----
-                for (int i = 0; i < dgv.Columns.Count; i++)
-                {
-                    var header = sheet.Cell(rowIndex, i + 1);
-                    header.Value = dgv.Columns[i].HeaderText;
-
-                    header.Style.Font.Bold = true;
-                    header.Style.Fill.BackgroundColor = XLColor.LightGray;
-
-                    var align = dgv.Columns[i].HeaderCell.Style.Alignment;
-                    header.Style.Alignment.Horizontal =
-                        ConvertAlign(align);
-                }
-
-                rowIndex++;
-
-                // ---- DATA ROWS ----
-                for (int r = 0; r < dgv.Rows.Count; r++)
-                {
-                    for (int c = 0; c < dgv.Columns.Count; c++)
-                    {
-                        var excelCell = sheet.Cell(rowIndex + r, c + 1);
-                        var gridCell = dgv.Rows[r].Cells[c];
-
-                        excelCell.Value = gridCell.Value?.ToString();
-
-                        // Alignment
-                        excelCell.Style.Alignment.Horizontal = ConvertAlign(gridCell.Style.Alignment);
-
-                        // Font
-                        if (gridCell.Style.Font != null)
-                        {
-                            excelCell.Style.Font.Bold = gridCell.Style.Font.Bold;
-                            excelCell.Style.Font.Italic = gridCell.Style.Font.Italic;
-                            excelCell.Style.Font.FontSize = gridCell.Style.Font.Size;
-                        }
-
-                        // Background color
-                        if (gridCell.Style.BackColor != Color.Empty &&
-                            gridCell.Style.BackColor != Color.Transparent)
-                        {
-                            excelCell.Style.Fill.BackgroundColor = XLColor.FromColor(gridCell.Style.BackColor);
-                        }
-                    }
-                }
-
-                sheet.Columns().AdjustToContents();
-                workbook.SaveAs(save.FileName);
-            }
-
-            MessagePopup.ShowPopup(CommonMessages.ExportExcel, true);
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine("Error: " + ex.Message);
-        }
-    }
     private static XLAlignmentHorizontalValues ConvertAlign(DataGridViewContentAlignment align)
     {
         if (align == DataGridViewContentAlignment.MiddleRight)
@@ -725,132 +559,6 @@ public static class CommonHelper
     }
 
     #endregion ExportExcel
-
-    #region ExportExcel Old Code
-    //public static void ExportToExcel(DataGridView dgv, string title, string fileName)
-    //{
-    //    try
-    //    {
-    //        string userProfile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
-    //        string folder = Path.Combine(userProfile, "Downloads");
-
-    //        if (!Directory.Exists(folder))
-    //            Directory.CreateDirectory(folder);
-
-    //        string baseName = fileName;
-    //        string fullPath = Path.Combine(folder, baseName + ".xlsx");
-
-    //        int counter = 1;
-    //        while (File.Exists(fullPath))
-    //        {
-    //            fullPath = Path.Combine(folder, $"{baseName} ({counter}).xlsx");
-    //            counter++;
-    //        }
-
-    //        SaveFileDialog save = new SaveFileDialog();
-    //        save.Filter = "Excel Workbook|*.xlsx";
-    //        save.Title = "Save Excel File";
-    //        save.InitialDirectory = folder;
-    //        save.FileName = Path.GetFileName(fullPath);
-
-    //        if (save.ShowDialog() != DialogResult.OK)
-    //            return;
-
-    //        Microsoft.Office.Interop.Excel.Application excelApp =
-    //            new Microsoft.Office.Interop.Excel.Application();
-    //        excelApp.Workbooks.Add(Type.Missing);
-
-    //        Microsoft.Office.Interop.Excel.Worksheet sheet =
-    //            (Microsoft.Office.Interop.Excel.Worksheet)excelApp.ActiveSheet;
-
-    //        int rowIndex = 1;
-
-    //        // ---- TITLE ----
-    //        sheet.Cells[rowIndex, 1] = title;
-
-    //        Microsoft.Office.Interop.Excel.Range titleRange =
-    //            sheet.Range[sheet.Cells[rowIndex, 1],
-    //                        sheet.Cells[rowIndex, dgv.Columns.Count]];
-    //        titleRange.Merge();
-    //        titleRange.Font.Size = 12;
-    //        titleRange.Font.Bold = false;
-    //        titleRange.HorizontalAlignment =
-    //            Microsoft.Office.Interop.Excel.XlHAlign.xlHAlignCenter;
-
-    //        rowIndex += 2;
-
-    //        // ---- COLUMN HEADERS ----
-    //        for (int i = 0; i < dgv.Columns.Count; i++)
-    //        {
-    //            var cell = sheet.Cells[rowIndex, i + 1];
-    //            cell.Value = dgv.Columns[i].HeaderText;
-
-    //            cell.Font.Bold = true;
-    //            cell.Interior.Color = Color.LightGray;
-
-    //            // Replace switch with if-else
-    //            var align = dgv.Columns[i].HeaderCell.Style.Alignment;
-    //            if (align == DataGridViewContentAlignment.MiddleRight)
-    //                cell.HorizontalAlignment = Microsoft.Office.Interop.Excel.XlHAlign.xlHAlignRight;
-    //            else if (align == DataGridViewContentAlignment.MiddleCenter)
-    //                cell.HorizontalAlignment = Microsoft.Office.Interop.Excel.XlHAlign.xlHAlignCenter;
-    //            else
-    //                cell.HorizontalAlignment = Microsoft.Office.Interop.Excel.XlHAlign.xlHAlignLeft;
-    //        }
-
-    //        rowIndex++;
-
-    //        // ---- DATA ROWS ----
-    //        for (int r = 0; r < dgv.Rows.Count; r++)
-    //        {
-    //            for (int c = 0; c < dgv.Columns.Count; c++)
-    //            {
-    //                var excelCell = sheet.Cells[r + rowIndex, c + 1];
-    //                var gridCell = dgv.Rows[r].Cells[c];
-
-    //                excelCell.Value = gridCell.Value?.ToString();
-
-    //                // Replace switch with if-else
-    //                var align = gridCell.Style.Alignment;
-    //                if (align == DataGridViewContentAlignment.MiddleRight)
-    //                    excelCell.HorizontalAlignment = Microsoft.Office.Interop.Excel.XlHAlign.xlHAlignRight;
-    //                else if (align == DataGridViewContentAlignment.MiddleCenter)
-    //                    excelCell.HorizontalAlignment = Microsoft.Office.Interop.Excel.XlHAlign.xlHAlignCenter;
-    //                else
-    //                    excelCell.HorizontalAlignment = Microsoft.Office.Interop.Excel.XlHAlign.xlHAlignLeft;
-
-    //                // FONT
-    //                if (gridCell.Style.Font != null)
-    //                {
-    //                    excelCell.Font.Bold = gridCell.Style.Font.Bold;
-    //                    excelCell.Font.Italic = gridCell.Style.Font.Italic;
-    //                    excelCell.Font.Size = gridCell.Style.Font.Size;
-    //                }
-
-    //                // BACKCOLOR
-    //                if (gridCell.Style.BackColor != Color.Empty &&
-    //                    gridCell.Style.BackColor != Color.Transparent)
-    //                {
-    //                    excelCell.Interior.Color = ColorTranslator.ToOle(gridCell.Style.BackColor);
-    //                }
-    //            }
-    //        }
-
-    //        // ---- Auto Fit ----
-    //        sheet.Columns.AutoFit();
-
-    //        sheet.SaveAs(save.FileName);
-    //        excelApp.Quit();
-
-    //        MessagePopup.ShowPopup(CommonMessages.ExportExcel, true);
-    //    }
-    //    catch (Exception ex)
-    //    {
-    //        Console.WriteLine("Error: " + ex.Message);
-    //    }
-    //}
-
-    #endregion ExportExcel Old Code
 
     #region AmountFormatter
     public static string FormatAmount(decimal amount)

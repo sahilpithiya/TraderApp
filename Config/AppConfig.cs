@@ -1,7 +1,7 @@
 ﻿using System;
 using System.IO;
 
-namespace TraderApp.Config
+namespace TraderApps.Config
 {
     public static class AppConfig
     {

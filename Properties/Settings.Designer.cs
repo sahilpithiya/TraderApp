@@ -8,7 +8,7 @@
 // </auto-generated>
 //------------------------------------------------------------------------------
 
-namespace TraderApp.Properties
+namespace TraderApps.Properties
 {
 
 

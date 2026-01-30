@@ -1,112 +1,101 @@
-﻿using System.Collections.Generic;
-using System.Linq;
+﻿using ClientDesktop.Models;
+using Newtonsoft.Json;
+using System;
+using System.Collections.Generic;
 using System.Net.Http;
 using System.Threading.Tasks;
-using Newtonsoft.Json;
-using TraderApp.Models;
-using TraderApp.Config;
-using TraderApp.Utils.Storage;
+using TraderApps.Config;
+using TraderApps.Helpers;
+using TraderApps.Models;
 
-namespace TraderApp.Services
+namespace TraderApps.Services
 {
     public class AuthService
     {
-        private readonly HttpClient _http;
-        private readonly FileRepository<List<LoginModel>> _loginRepo; // Login History Save karne ke liye
-        private readonly FileRepository<List<ServerList>> _serverRepo; // Server List Cache ke liye
+        #region Variables And Configuration
+        private static readonly HttpClient _http = new HttpClient();
+        public static string AuthUrl => AppConfig.AuthURL;
+        #endregion
 
-        public AuthService()
-        {
-            _http = new HttpClient();
-            _loginRepo = new FileRepository<List<LoginModel>>("LoginData");
-            _serverRepo = new FileRepository<List<ServerList>>("ServerList");
-        }
-
-        // 1. Get Server List (API -> Cache -> Return)
-        public async Task<List<ServerList>> GetServersAsync()
+        #region Authentication Method
+        public static async Task<(bool Success, string ErrorMessage, AuthResponseData ResponseData)> AuthenticateAsync(
+            string username, string password, string licenseId)
         {
             try
             {
-                // Try API
-                var response = await _http.GetAsync(AppConfig.ServerListURL.ToReplaceUrl());
-                if (response.IsSuccessStatusCode)
+                var formContent = new FormUrlEncodedContent(new[]
                 {
-                    var json = await response.Content.ReadAsStringAsync();
-                    var result = JsonConvert.DeserializeObject<ServerListResponse>(json);
-
-                    if (result?.isSuccess == true && result.data?.licenseDetail != null)
-                    {
-                        // Save to Local Cache
-                        _serverRepo.Save(result.data.licenseDetail);
-                        return result.data.licenseDetail;
-                    }
-                }
-            }
-            catch { /* Internet issue? Fallback to cache */ }
-
-            // Fallback: Load from Cache
-            return _serverRepo.Load() ?? new List<ServerList>();
-        }
-
-        // 2. Login Logic
-        public async Task<(bool Success, string Message, AuthResponseData Data)> LoginAsync(string userId, string password, string licenseId)
-        {
-            try
-            {
-                var content = new FormUrlEncodedContent(new[]
-                {
-                    new KeyValuePair<string, string>("username", userId),
+                    new KeyValuePair<string, string>("username", username),
                     new KeyValuePair<string, string>("password", password),
                     new KeyValuePair<string, string>("licenseId", licenseId)
                 });
 
-                var response = await _http.PostAsync(AppConfig.AuthURL.ToReplaceUrl(), content);
-                var json = await response.Content.ReadAsStringAsync();
-
-                // Tera existing AuthResponse model use karenge (namespace check karlena)
-                var authResult = JsonConvert.DeserializeObject<AuthResponse>(json);
-
-                if (authResult?.isSuccess == true)
+                using (var resp = await _http.PostAsync(AuthUrl.ToReplaceUrl(), formContent).ConfigureAwait(false))
                 {
-                    // 3. Login Successful - Save Data Locally
-                    SaveLoginDataLocally(userId, password, licenseId);
-                    return (true, "Success", authResult.data);
-                }
+                    var respString = await resp.Content.ReadAsStringAsync().ConfigureAwait(false);
 
-                return (false, authResult?.successMessage ?? "Login Failed", null);
+                    if (!resp.IsSuccessStatusCode)
+                        return (false,
+                            JsonConvert.DeserializeObject<dynamic>(respString)?
+                            .exception?.message?.ToString()
+                            ?? $"{(int)resp.StatusCode}: {resp.ReasonPhrase}", null);
+
+                    var authResp = JsonConvert.DeserializeObject<AuthResponse>(respString);
+                    if (authResp == null)
+                        return (false, "Invalid response from server", null);
+
+                    if (!authResp.isSuccess || authResp.data == null)
+                        return (false, authResp.successMessage ?? "Login failed", null);
+
+                    return (true, null, authResp.data);
+                }
             }
-            catch (System.Exception ex)
+            catch (Exception ex)
             {
                 return (false, ex.Message, null);
             }
         }
 
-        // 4. Helper: Save Login Data (Remember Logic)
-        private void SaveLoginDataLocally(string userId, string password, string licenseId)
+        public static async Task AuthenticateAsyncGET()
         {
-            var list = _loginRepo.Load() ?? new List<LoginModel>();
-
-            // Remove existing entry for same user
-            list.RemoveAll(x => x.UserId == userId && x.LicenseId == licenseId);
-
-            // Add new entry
-            list.Add(new LoginModel
+            try
             {
-                UserId = userId,
-                Password = password,
-                LicenseId = licenseId,
-                LastLoginTime = System.DateTime.Now,
-                IsRememberMe = true // Logic badal sakte hain checkbox ke hisab se
-            });
+                _http.AddAuthHeader();
+                using (var resp = await _http.GetAsync(AuthUrl.ToReplaceUrl()).ConfigureAwait(false))
+                {
+                    var respString = await resp.Content.ReadAsStringAsync().ConfigureAwait(false);
 
-            _loginRepo.Save(list);
-        }
+                    if (!resp.IsSuccessStatusCode)
+                        return;
 
-        // 5. Get Last Login User (Auto-fill ke liye)
-        public LoginModel GetLastLoginUser()
-        {
-            var list = _loginRepo.Load();
-            return list?.OrderByDescending(x => x.LastLoginTime).FirstOrDefault();
+                    var authResp = JsonConvert.DeserializeObject<AuthResponseObj>(respString);
+                    if (authResp == null)
+                        return;
+
+                    if (!authResp.isSuccess || authResp.data == null)
+                        return;
+
+                    if (authResp.data != null)
+                    {
+                        SocketLoginInfo socketInfo = new SocketLoginInfo();
+                        socketInfo.UserSubId = authResp.data.sub;
+                        socketInfo.UserIss = authResp.data.iss;
+                        socketInfo.LicenseId = SessionManager.LicenseId;
+                        socketInfo.Intime = authResp.data.intime;
+                        socketInfo.Role = authResp.data.role;
+                        socketInfo.IpAddress = authResp.data.ip;
+                        socketInfo.Device = "Windows";
+
+                        SessionManager.socketLoginInfos = socketInfo;
+                        SessionManager.IsPasswordReadOnly = authResp.data.isreadonlypassword;
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine("Error From AuthenticateAsyncGET - " + ex.Message);
+            }
         }
+        #endregion
     }
 }

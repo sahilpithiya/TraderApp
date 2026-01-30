@@ -1,4 +1,4 @@
-﻿namespace ClientDesktop
+﻿namespace TraderApps
 {
     partial class LoginPage
     {
@@ -77,7 +77,7 @@
             // 
             // accountPictureBox
             // 
-            this.accountPictureBox.Image = global::ClientDesktop.Properties.Resources.loginnew;
+            this.accountPictureBox.Image = global::TraderApp.Properties.Resources.loginnew;
             this.accountPictureBox.Location = new System.Drawing.Point(25, 24);
             this.accountPictureBox.Name = "accountPictureBox";
             this.accountPictureBox.Size = new System.Drawing.Size(41, 32);
@@ -152,7 +152,7 @@
             // eyePictureBox
             // 
             this.eyePictureBox.Cursor = System.Windows.Forms.Cursors.Hand;
-            this.eyePictureBox.Image = global::ClientDesktop.Properties.Resources.eye_close;
+            this.eyePictureBox.Image = global::TraderApp.Properties.Resources.eye_close;
             this.eyePictureBox.Location = new System.Drawing.Point(306, 152);
             this.eyePictureBox.Margin = new System.Windows.Forms.Padding(4, 4, 4, 4);
             this.eyePictureBox.Name = "eyePictureBox";

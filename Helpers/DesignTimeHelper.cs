@@ -1,13 +1,13 @@
 ﻿using ClientDesktop.HelperClass;
-using RtfPipe;
 using System;
 using System.Drawing;
 using System.IO;
 using System.Linq;
 using System.Windows.Forms;
+using TraderApps.Config;
 using WeifenLuo.WinFormsUI.Docking;
 
-namespace ClientDesktop
+namespace TraderApps
 {
     public class DesignTimeHelper
     {
@@ -15,7 +15,7 @@ namespace ClientDesktop
         private readonly DockPanel dockPanel;
 
         private const string LayoutFileName = "layout.xml";
-        private string LayoutFilePath => Path.Combine(CommonPaths.dataFolder, LayoutFileName);
+        private string LayoutFilePath => Path.Combine(AppConfig.dataFolder, LayoutFileName);
         #endregion
 
         #region Constructor

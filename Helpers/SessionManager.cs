@@ -1,12 +1,13 @@
-﻿using System;
+﻿using ClientDesktop.Models;
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
-using TraderApp.Models;
+using TraderApps.Models;
 
-namespace TraderApp.Helpers
+namespace TraderApps.Helpers
 {
     public static class SessionManager
     {
@@ -23,6 +24,8 @@ namespace TraderApp.Helpers
         public static bool IsClientDataLoaded { get; set; } = false;
         public static bool IsPasswordReadOnly { get; set; } = false;
         ////public static List<MarketWatchApiSymbol> SymbolNameList { get; internal set; }
+
+        public static List<ClientDetails> ClientListData { get; private set; }
         public static string Password { get; private set; }
         public static double LastSelectedQty { get; set; }
         public static (string UserId, string password, string LicenseId) LastSelectedLogin { get; set; }
@@ -31,6 +34,7 @@ namespace TraderApp.Helpers
         private static readonly string TokenFile = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
             "ClientDesktop", "session.dat");
+
         #endregion
 
         #region Session Management
@@ -54,6 +58,11 @@ namespace TraderApp.Helpers
         ////    ClientListData = clients;
         ////    SessionManager.socketLoginInfos.OperatorId = clients.FirstOrDefault().OperatorId;
         ////}
+
+        public static void SetClientList(List<ClientDetails> clients)
+        {
+            ClientListData = clients;
+        }
 
         public static void ClearSession()
         {

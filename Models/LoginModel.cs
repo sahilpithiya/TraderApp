@@ -1,7 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 
-namespace TraderApp.Models
+namespace TraderApps.Models
 {
     public class LoginModel
     {

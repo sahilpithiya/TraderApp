@@ -1,9 +1,9 @@
 ﻿using Newtonsoft.Json;
 using System;
 using System.IO;
-using TraderApp.Config;
+using TraderApps.Config;
 
-namespace TraderApp.Utils.Storage
+namespace TraderApps.Utils.Storage
 {
     public class FileRepository<T>
     {

@@ -1,6 +1,6 @@
 ﻿using System.Windows.Forms;
 
-namespace ClientDesktop
+namespace TraderApps
 {
     partial class Home
     {
@@ -53,11 +53,10 @@ namespace ClientDesktop
             // 
             // trade
             // 
-            this.trade.Image = global::ClientDesktop.Properties.Resources.tradesnew;
+            this.trade.Image = global::TraderApp.Properties.Resources.tradesnew;
             this.trade.Name = "trade";
             this.trade.Size = new System.Drawing.Size(70, 24);
             this.trade.Text = "Trade";
-            this.trade.Click += new System.EventHandler(this.trade_Click);
             // 
             // toolStripSeparator6
             // 
@@ -77,26 +76,24 @@ namespace ClientDesktop
             this.changePasswordToolStripMenuItem,
             this.disconnectToolStripMenuItem});
             this.toolStripDropDownUserButton.Font = new System.Drawing.Font("Microsoft Sans Serif", 10F);
-            this.toolStripDropDownUserButton.Image = global::ClientDesktop.Properties.Resources.user;
+            this.toolStripDropDownUserButton.Image = global::TraderApp.Properties.Resources.user;
             this.toolStripDropDownUserButton.ImageTransparentColor = System.Drawing.Color.White;
             this.toolStripDropDownUserButton.Name = "toolStripDropDownUserButton";
             this.toolStripDropDownUserButton.Size = new System.Drawing.Size(34, 24);
             // 
             // changePasswordToolStripMenuItem
             // 
-            this.changePasswordToolStripMenuItem.Image = global::ClientDesktop.Properties.Resources.change_password;
+            this.changePasswordToolStripMenuItem.Image = global::TraderApp.Properties.Resources.change_password;
             this.changePasswordToolStripMenuItem.Name = "changePasswordToolStripMenuItem";
             this.changePasswordToolStripMenuItem.Size = new System.Drawing.Size(228, 26);
             this.changePasswordToolStripMenuItem.Text = "Change Password";
-            this.changePasswordToolStripMenuItem.Click += new System.EventHandler(this.changePasswordToolStripMenuItem_Click);
             // 
             // disconnectToolStripMenuItem
             // 
-            this.disconnectToolStripMenuItem.Image = global::ClientDesktop.Properties.Resources.connected;
+            this.disconnectToolStripMenuItem.Image = global::TraderApp.Properties.Resources.connected;
             this.disconnectToolStripMenuItem.Name = "disconnectToolStripMenuItem";
             this.disconnectToolStripMenuItem.Size = new System.Drawing.Size(228, 26);
             this.disconnectToolStripMenuItem.Text = "Connect";
-            this.disconnectToolStripMenuItem.Click += new System.EventHandler(this.disconnectToolStripMenuItem_Click);
             // 
             // dockPanel
             // 
