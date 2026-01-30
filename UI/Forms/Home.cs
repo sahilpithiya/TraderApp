@@ -24,8 +24,6 @@ namespace TraderApps.UI.Forms
 
         // Dockable panels
         private DockContent MarketwatchDock;
-        private DockContent NavigationDock;
-        private DockContent ChartDock;
         private DockContent DetailsDock;
 
         //private UCMarketWatchControl _marketWatchUC;
@@ -81,41 +79,21 @@ namespace TraderApps.UI.Forms
         #region Authentication And Login Handling
         public async void InitializeHome()
         {
-            string layoutFile = Path.Combine(AppConfig.dataFolder, "layout.xml");
+            ShowEmptyColoredLayout();
 
-            bool isLayoutLoaded = false;
-
-            if (File.Exists(layoutFile))
-            {
-                try
-                {
-                    dockPanel.LoadFromXml(layoutFile, DeserializeDockContent);
-                    isLayoutLoaded = true;
-
-                    ConvertLoadedPanelsToEmpty();
-                }
-                catch (Exception ex)
-                {
-                    Console.WriteLine("Layout load failed: " + ex.Message);
-                }
-            }
-
-            if (!isLayoutLoaded)
-            {
-                ShowEmptyDockLayout();
-            }
-
-            //this.changePasswordToolStripMenuItem.Visible = false;
-            //this.trade.Visible = false;
-            //this.panelsDropdown.Visible = false;
+            // 1. Hide Toolbar items initially
             this.toolStripSeparator6.Visible = false;
 
+            // 2. Load Server List
             await LoadServerListAsync();
-            string filePath = Path.Combine(Path.Combine(AppConfig.dataFolder, $"{AESHelper.ToBase64UrlSafe("LoginData")}.dat"));
+
+            // 3. Check for Saved Login
+            string filePath = Path.Combine(AppConfig.dataFolder, $"{AESHelper.ToBase64UrlSafe("LoginData")}.dat");
             var loginInfoList = CommonHelper.LoadLoginDataFromCache(filePath);
 
-            if (loginInfoList == null)
+            if (loginInfoList == null || !loginInfoList.Any())
             {
+                // No saved user -> Show Login -> Background will be Empty
                 ShowLoginForm();
             }
             else
@@ -133,6 +111,7 @@ namespace TraderApps.UI.Forms
                     }
                     else
                     {
+                        // Silent Login for "Remember Me"
                         LoginPage loginPage = new LoginPage();
                         bool loginSuccessful = await loginPage.LoginAsync(existingUser.UserId, existingUser.Password, existingUser.LicenseId, existingUser.LastLogin);
 
@@ -149,7 +128,6 @@ namespace TraderApps.UI.Forms
                                     clientDetails = specificData.Clients;
                                     var result1 = await GetClientListAsync();
                                     var clients = result1.Clients;
-                                    // Save globally
                                     SessionManager.IsClientDataLoaded = true;
                                     SessionManager.SetClientList(clients);
                                 }
@@ -159,8 +137,8 @@ namespace TraderApps.UI.Forms
                                     return;
                                 }
 
+                                // SUCCESS: Now we show the panels
                                 InitializeAfterLogin(popup);
-                                //SocketManager.Start();
                             }
                         }
                         else
@@ -263,78 +241,77 @@ namespace TraderApps.UI.Forms
                 : "Home";
             this.Text = title;
 
-            //this.changePasswordToolStripMenuItem.Visible = true;
             if (!SessionManager.IsPasswordReadOnly)
             {
-                //this.trade.Visible = true;
                 this.toolStripSeparator6.Visible = true;
             }
-            //this.panelsDropdown.Visible = true;
-
-
-            //if (!_isUserControlsPreloaded || _marketWatchUC == null || _marketWatchUC.IsDisposed)
-            //    await PreloadUserControlsAsync();
 
             this.SuspendLayout();
             dockPanel.SuspendLayout(true);
-
             try
             {
-                //// Panels ko destroy karne ke bajaye, content swap kar rahe hain
-                //UpdatePanelContent("Market Watch", _marketWatchUC);
+                dockPanel.DockBottomPortion = this.Height * 0.30;
 
-                //// Navigation panel ke liye special case (dock position check)
-                //UpdatePanelContent("Navigation", _navigationUC);
+                // --- CHANGE: Now we create Labels with Text ---
+                Label lblMarket = new Label();
+                lblMarket.Text = "Market Watch";
+                lblMarket.TextAlign = ContentAlignment.MiddleCenter;
+                lblMarket.BackColor = Color.AliceBlue;
+                lblMarket.Dock = DockStyle.Fill;
+                lblMarket.Font = new Font("Segoe UI", 14, FontStyle.Bold);
 
-                //UpdatePanelContent("Chart", _chartUC);
-                //UpdatePanelContent("Details", _detailsUC);
+                Label lblDetails = new Label();
+                lblDetails.Text = "Details";
+                lblDetails.TextAlign = ContentAlignment.MiddleCenter;
+                lblDetails.BackColor = Color.MistyRose;
+                lblDetails.Dock = DockStyle.Fill;
+                lblDetails.Font = new Font("Segoe UI", 14, FontStyle.Bold);
 
-                //EnsurePanelsVisible();
+                // Update Panels
+                UpdatePanelContent("Market Watch", lblMarket);
+                UpdatePanelContent("Details", lblDetails);
+
+                EnsurePanelsVisible();
             }
             finally
             {
-                // UI Updates resume kar
                 dockPanel.ResumeLayout(true, true);
                 this.ResumeLayout(true);
-            }
-
-            // Dropdown update
-            InitializePanelsDropdown();
-
-            // Re-attach closing events just in case
-            foreach (var kv in allPanels)
-            {
-                var panel = kv.Value;
-                panel.FormClosing -= Dock_FormClosing;
-                panel.FormClosing += Dock_FormClosing;
-                TrackPanel(panel);
             }
 
             this.Show();
         }
 
-        private void UpdatePanelContent(string key, UserControl newContent)
+        // Change 'UserControl' to 'Control' here
+        private void UpdatePanelContent(string key, Control newContent)
         {
-            if (allPanels.TryGetValue(key, out DockContent panel) && !panel.IsDisposed)
+            DockContent panel;
+
+            if (allPanels.TryGetValue(key, out DockContent existingPanel) && !existingPanel.IsDisposed)
             {
+                panel = existingPanel;
                 panel.Controls.Clear();
-
-                newContent.Dock = DockStyle.Fill;
-                panel.Controls.Add(newContent);
-
-                panel.Text = key;
             }
             else
             {
-                var newPanel = CreateDockContentWithUserControl(key, newContent);
-                allPanels[key] = newPanel;
+                panel = new DesignTimeHelper.DynamicDockContent(key, null);
+                panel.FormClosing += Dock_FormClosing;
+                // TrackPanel(panel); // Add this if you have the tracking method
+                allPanels[key] = panel;
+            }
 
-                // Default showing logic
-                if (key == "Market Watch") newPanel.Show(dockPanel, DockState.DockLeft);
-                else if (key == "Chart") newPanel.Show(dockPanel, DockState.Document);
-                else if (key == "Details") newPanel.Show(dockPanel, DockState.DockBottom);
-                else if (key == "Navigation" && allPanels.ContainsKey("Market Watch"))
-                    newPanel.Show(allPanels["Market Watch"].Pane, DockAlignment.Bottom, 0.5);
+            newContent.Dock = DockStyle.Fill;
+            panel.Controls.Add(newContent);
+            panel.Text = key;
+
+            // --- CRITICAL CHANGE FOR LAYOUT ---
+            if (key == "Market Watch")
+            {
+                panel.Show(dockPanel, DockState.Document); // Fills top area
+            }
+            else if (key == "Details")
+            {
+                panel.Show(dockPanel, DockState.DockBottom); // Fills bottom 30%
             }
         }
 
@@ -445,14 +422,6 @@ namespace TraderApps.UI.Forms
             allPanels["Market Watch"] = MarketwatchDock;
             MarketwatchDock.Show(dockPanel, DockState.DockLeft);
 
-            NavigationDock = CreateEmptyDockContentWithBorder("Navigation");
-            allPanels["Navigation"] = NavigationDock;
-            NavigationDock.Show(MarketwatchDock.Pane, DockAlignment.Bottom, 0.5);
-
-            ChartDock = CreateEmptyDockContentWithBorder("Chart");
-            allPanels["Chart"] = ChartDock;
-            ChartDock.Show(dockPanel, DockState.Document);
-
             DetailsDock = CreateEmptyDockContentWithBorder("Details");
             allPanels["Details"] = DetailsDock;
             DetailsDock.Show(dockPanel, DockState.DockBottom);
@@ -460,21 +429,20 @@ namespace TraderApps.UI.Forms
 
         private DockContent CreateEmptyDockContentWithBorder(string title)
         {
-            // Create a panel with visible border
             var borderedPanel = new Panel
             {
-                BackColor = ThemeManager.Gray,
+                BackColor = Color.White, // Changed to White for cleaner look
                 BorderStyle = BorderStyle.FixedSingle,
                 Dock = DockStyle.Fill
             };
 
-            // Add a label to indicate this area needs login
             var label = new Label
             {
-                Text = string.Empty,
+                Text = title, // <--- FIXED: Now uses the title ("Market Watch", etc.)
                 TextAlign = ContentAlignment.MiddleCenter,
                 Dock = DockStyle.Fill,
-                ForeColor = ThemeManager.Black
+                ForeColor = Color.Black,
+                Font = new Font("Segoe UI", 12, FontStyle.Bold) // Made it visible
             };
 
             borderedPanel.Controls.Add(label);
@@ -484,6 +452,31 @@ namespace TraderApps.UI.Forms
             TrackPanel(dockContent);
             return dockContent;
         }
+
+        private void ShowEmptyColoredLayout()
+        {
+            this.SuspendLayout();
+            dockPanel.SuspendLayout(true);
+            try
+            {
+                // 1. Set 30% Height for Bottom Panel
+                dockPanel.DockBottomPortion = this.Height * 0.30;
+
+                // 2. Create EMPTY colored panels (No Text)
+                Panel emptyBluePanel = new Panel { BackColor = Color.AliceBlue, Dock = DockStyle.Fill };
+                Panel emptyPinkPanel = new Panel { BackColor = Color.MistyRose, Dock = DockStyle.Fill };
+
+                // 3. Add them to Dock
+                UpdatePanelContent("Market Watch", emptyBluePanel);
+                UpdatePanelContent("Details", emptyPinkPanel);
+            }
+            finally
+            {
+                dockPanel.ResumeLayout(true, true);
+                this.ResumeLayout(true);
+            }
+        }
+
         #endregion
 
         #region Panel Tracking And Dropdown
@@ -583,9 +576,6 @@ namespace TraderApps.UI.Forms
                 if (allPanels.TryGetValue("Navigation", out var nav) && market?.Pane != null)
                     nav.Show(market.Pane, DockAlignment.Bottom, 0.5);
 
-                if (allPanels.TryGetValue("Chart", out var chart))
-                    chart.Show(dockPanel, DockState.Document);
-
                 if (allPanels.TryGetValue("Details", out var details))
                     details.Show(dockPanel, DockState.DockBottom);
 
@@ -630,8 +620,6 @@ namespace TraderApps.UI.Forms
             //else
             //{
                 GetOrCreate("Market Watch", () => CreateEmptyDockContentWithBorder("Market Watch"));
-                GetOrCreate("Navigation", () => CreateEmptyDockContentWithBorder("Navigation"));
-                GetOrCreate("Chart", () => CreateEmptyDockContentWithBorder("Chart"));
                 GetOrCreate("Details", () => CreateEmptyDockContentWithBorder("Details"));
             //}
         }
