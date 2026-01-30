@@ -5,7 +5,6 @@ using Newtonsoft.Json.Linq;
 using System;
 using System.Collections.Generic;
 using System.Data;
-using System.Drawing;
 using System.Globalization;
 using System.IO;
 using System.Linq;
@@ -14,7 +13,6 @@ using System.Threading.Tasks;
 using System.Windows.Forms;
 using TraderApps.Config;
 using TraderApps.Helpers;
-using TraderApps.Models;
 
 public static class CommonHelper    
 {

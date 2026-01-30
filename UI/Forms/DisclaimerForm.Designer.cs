@@ -1,6 +1,6 @@
-﻿using ClientDesktop.HelperClass;
-using System.Drawing;
+﻿using System.Drawing;
 using System.Windows.Forms;
+using TraderApps.UI.Theme;
 
 namespace DesktopClient
 {

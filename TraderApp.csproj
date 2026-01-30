@@ -116,7 +116,7 @@
   <ItemGroup>
     <Compile Include="Config\AppConfig.cs" />
     <Compile Include="Helpers\CommonHelper.cs" />
-    <Compile Include="Helpers\DesignTimeHelper.cs" />
+    <Compile Include="UI\Theme\DesignTimeHelper.cs" />
     <Compile Include="Helpers\SessionManager.cs" />
     <Compile Include="Models\AuthResponse.cs" />
     <Compile Include="Models\BanScripts.cs" />

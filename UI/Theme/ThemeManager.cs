@@ -3,7 +3,7 @@ using System.Drawing;
 using System.Windows.Forms;
 using TraderApps;
 
-namespace ClientDesktop.HelperClass
+namespace TraderApps.UI.Theme
 {
     public static class ThemeManager
     {

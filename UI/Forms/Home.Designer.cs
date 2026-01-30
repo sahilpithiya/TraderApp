@@ -1,6 +1,6 @@
 ﻿using System.Windows.Forms;
 
-namespace TraderApps
+namespace TraderApps.UI.Forms
 {
     partial class Home
     {
@@ -47,27 +47,30 @@ namespace TraderApps
             this.toolStripDropDownUserButton});
             this.toolStrip1.Location = new System.Drawing.Point(0, 0);
             this.toolStrip1.Name = "toolStrip1";
-            this.toolStrip1.Padding = new System.Windows.Forms.Padding(0, 0, 7, 0);
-            this.toolStrip1.Size = new System.Drawing.Size(997, 27);
+            this.toolStrip1.Padding = new System.Windows.Forms.Padding(0, 0, 10, 0);
+            this.toolStrip1.Size = new System.Drawing.Size(1496, 34);
             this.toolStrip1.TabIndex = 1;
             // 
             // trade
             // 
             this.trade.Image = global::TraderApp.Properties.Resources.tradesnew;
             this.trade.Name = "trade";
-            this.trade.Size = new System.Drawing.Size(70, 24);
+            this.trade.Size = new System.Drawing.Size(78, 29);
             this.trade.Text = "Trade";
+            this.trade.Visible = false;
+            this.trade.Click += new System.EventHandler(this.trade_Click);
             // 
             // toolStripSeparator6
             // 
             this.toolStripSeparator6.Name = "toolStripSeparator6";
-            this.toolStripSeparator6.Size = new System.Drawing.Size(6, 27);
+            this.toolStripSeparator6.Size = new System.Drawing.Size(6, 34);
             // 
             // panelsDropdown
             // 
             this.panelsDropdown.Name = "panelsDropdown";
-            this.panelsDropdown.Size = new System.Drawing.Size(78, 24);
+            this.panelsDropdown.Size = new System.Drawing.Size(96, 29);
             this.panelsDropdown.Text = "Window";
+            this.panelsDropdown.Visible = false;
             // 
             // toolStripDropDownUserButton
             // 
@@ -79,21 +82,24 @@ namespace TraderApps
             this.toolStripDropDownUserButton.Image = global::TraderApp.Properties.Resources.user;
             this.toolStripDropDownUserButton.ImageTransparentColor = System.Drawing.Color.White;
             this.toolStripDropDownUserButton.Name = "toolStripDropDownUserButton";
-            this.toolStripDropDownUserButton.Size = new System.Drawing.Size(34, 24);
+            this.toolStripDropDownUserButton.Size = new System.Drawing.Size(38, 29);
             // 
             // changePasswordToolStripMenuItem
             // 
             this.changePasswordToolStripMenuItem.Image = global::TraderApp.Properties.Resources.change_password;
             this.changePasswordToolStripMenuItem.Name = "changePasswordToolStripMenuItem";
-            this.changePasswordToolStripMenuItem.Size = new System.Drawing.Size(228, 26);
+            this.changePasswordToolStripMenuItem.Size = new System.Drawing.Size(275, 34);
             this.changePasswordToolStripMenuItem.Text = "Change Password";
+            this.changePasswordToolStripMenuItem.Visible = false;
+            this.changePasswordToolStripMenuItem.Click += new System.EventHandler(this.changePasswordToolStripMenuItem_Click);
             // 
             // disconnectToolStripMenuItem
             // 
             this.disconnectToolStripMenuItem.Image = global::TraderApp.Properties.Resources.connected;
             this.disconnectToolStripMenuItem.Name = "disconnectToolStripMenuItem";
-            this.disconnectToolStripMenuItem.Size = new System.Drawing.Size(228, 26);
+            this.disconnectToolStripMenuItem.Size = new System.Drawing.Size(275, 34);
             this.disconnectToolStripMenuItem.Text = "Connect";
+            this.disconnectToolStripMenuItem.Click += new System.EventHandler(this.disconnectToolStripMenuItem_Click);
             // 
             // dockPanel
             // 
@@ -102,9 +108,9 @@ namespace TraderApps
             this.dockPanel.Dock = System.Windows.Forms.DockStyle.Fill;
             this.dockPanel.Font = new System.Drawing.Font("Microsoft Sans Serif", 15F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.World);
             this.dockPanel.Location = new System.Drawing.Point(0, 0);
-            this.dockPanel.Margin = new System.Windows.Forms.Padding(2, 3, 2, 3);
+            this.dockPanel.Margin = new System.Windows.Forms.Padding(3, 5, 3, 5);
             this.dockPanel.Name = "dockPanel";
-            this.dockPanel.Size = new System.Drawing.Size(997, 655);
+            this.dockPanel.Size = new System.Drawing.Size(1496, 1015);
             this.dockPanel.TabIndex = 2;
             // 
             // topPanel
@@ -114,9 +120,9 @@ namespace TraderApps
             this.topPanel.Controls.Add(this.toolStrip1);
             this.topPanel.Dock = System.Windows.Forms.DockStyle.Top;
             this.topPanel.Location = new System.Drawing.Point(0, 0);
-            this.topPanel.Margin = new System.Windows.Forms.Padding(2, 1, 2, 1);
+            this.topPanel.Margin = new System.Windows.Forms.Padding(3, 2, 3, 2);
             this.topPanel.Name = "topPanel";
-            this.topPanel.Size = new System.Drawing.Size(997, 27);
+            this.topPanel.Size = new System.Drawing.Size(1496, 34);
             this.topPanel.TabIndex = 5;
             // 
             // middlePanel
@@ -124,22 +130,22 @@ namespace TraderApps
             this.middlePanel.AutoSize = true;
             this.middlePanel.Controls.Add(this.dockPanel);
             this.middlePanel.Dock = System.Windows.Forms.DockStyle.Fill;
-            this.middlePanel.Location = new System.Drawing.Point(0, 27);
-            this.middlePanel.Margin = new System.Windows.Forms.Padding(2, 1, 2, 1);
+            this.middlePanel.Location = new System.Drawing.Point(0, 34);
+            this.middlePanel.Margin = new System.Windows.Forms.Padding(3, 2, 3, 2);
             this.middlePanel.Name = "middlePanel";
-            this.middlePanel.Size = new System.Drawing.Size(997, 655);
+            this.middlePanel.Size = new System.Drawing.Size(1496, 1015);
             this.middlePanel.TabIndex = 6;
             // 
             // Home
             // 
-            this.AutoScaleDimensions = new System.Drawing.SizeF(6F, 13F);
+            this.AutoScaleDimensions = new System.Drawing.SizeF(9F, 20F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
             this.BackColor = System.Drawing.Color.White;
-            this.ClientSize = new System.Drawing.Size(997, 682);
+            this.ClientSize = new System.Drawing.Size(1496, 1049);
             this.Controls.Add(this.middlePanel);
             this.Controls.Add(this.topPanel);
             this.Icon = ((System.Drawing.Icon)(resources.GetObject("$this.Icon")));
-            this.Margin = new System.Windows.Forms.Padding(2, 3, 2, 3);
+            this.Margin = new System.Windows.Forms.Padding(3, 5, 3, 5);
             this.Name = "Home";
             this.StartPosition = System.Windows.Forms.FormStartPosition.Manual;
             this.WindowState = System.Windows.Forms.FormWindowState.Maximized;

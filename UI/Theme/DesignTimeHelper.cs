@@ -1,5 +1,4 @@
-﻿using ClientDesktop.HelperClass;
-using System;
+﻿using System;
 using System.Drawing;
 using System.IO;
 using System.Linq;
@@ -7,7 +6,7 @@ using System.Windows.Forms;
 using TraderApps.Config;
 using WeifenLuo.WinFormsUI.Docking;
 
-namespace TraderApps
+namespace TraderApps.UI.Theme
 {
     public class DesignTimeHelper
     {

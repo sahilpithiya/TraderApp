@@ -1,5 +1,4 @@
 ﻿using ClientDesktop;
-using ClientDesktop.HelperClass;
 using ClientDesktop.Models;
 using Newtonsoft.Json;
 using System;
@@ -13,6 +12,7 @@ using TraderApps.Config;
 using TraderApps.Helpers;
 using TraderApps.Models;
 using TraderApps.Services;
+using TraderApps.UI.Theme;
 
 namespace TraderApps
 {

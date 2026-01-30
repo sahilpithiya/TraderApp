@@ -1,8 +1,8 @@
-﻿using ClientDesktop.HelperClass;
-using System;
+﻿using System;
 using System.Drawing;
 using System.Runtime.InteropServices;
 using System.Windows.Forms;
+using TraderApps.UI.Theme;
 
 namespace DesktopClient
 {
