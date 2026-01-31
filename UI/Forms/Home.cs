@@ -175,11 +175,6 @@ namespace TraderApps.UI.Forms
             }
         }
 
-        private async Task LoadServerListAsync()
-        {
-            string folder = AESHelper.ToBase64UrlSafe("Servers");
-            string file = AESHelper.ToBase64UrlSafe("ServerList");
-            string encryptedContent = null;
 
         private async void ShowLoginForm()
         {
