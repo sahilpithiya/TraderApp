@@ -31,7 +31,7 @@ namespace TraderApps.UI.Forms
         private DockContent MarketwatchDock;
         private DockContent DetailsDock;
 
-        //private DetailsControl _detailsUC;
+        private DetailsControl _detailsUC;
 
         private bool _isUserControlsPreloaded = false;
         private bool IsComeFromSocket = false;
@@ -249,11 +249,13 @@ namespace TraderApps.UI.Forms
                 lblMarket.Dock = DockStyle.Fill;
                 lblMarket.Font = new Font("Segoe UI", 14, FontStyle.Bold);
 
-                //if(_detailsUC == null || _detailsUC.IsDisposed)
-                //{
-                //    _detailsUC = new DetailsControl();
-                //}
-                //UpdatePanelContent("Details", _detailsUC);
+
+                if (_detailsUC == null || _detailsUC.IsDisposed)
+                {
+                    _detailsUC = new DetailsControl();
+                }
+                UpdatePanelContent("Details", _detailsUC);
+
 
                 // Update Panels
                 UpdatePanelContent("Market Watch", lblMarket);

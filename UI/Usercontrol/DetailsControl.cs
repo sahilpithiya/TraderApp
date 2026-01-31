@@ -1677,10 +1677,10 @@ namespace TraderApp.UI.Usercontrol
         private void LoadJournalView()
         {
             currentActiveTab = "Journal";
-            
+
             FilterPanel.Visible = false;
             ResetPanel();
-            
+
             // Create a new DataGridView for Journal
             DataGridView journalDataGrid = CreateNewDataGridView();
 
@@ -1698,10 +1698,10 @@ namespace TraderApp.UI.Usercontrol
             // ✅ ADDED DUMMY DATA HERE (5 Rows)
             // ---------------------------------------------------------
             journalDataGrid.Rows.Add(
-                DateTime.Now.ToString("dd/MM/yyyy HH:mm:ss"), 
-                "Main Server", 
-                SessionManager.UserId ?? "88001", 
-                "Auth Request: Login", 
+                DateTime.Now.ToString("dd/MM/yyyy HH:mm:ss"),
+                "Main Server",
+                SessionManager.UserId ?? "88001",
+                "Auth Request: Login",
                 "Authorized"
             );
 

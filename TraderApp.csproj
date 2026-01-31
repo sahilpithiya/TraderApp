@@ -177,6 +177,7 @@
     <Compile Include="UI\Usercontrol\MarketWatchControl.Designer.cs">
       <DependentUpon>MarketWatchControl.cs</DependentUpon>
     </Compile>
+    <Compile Include="Utils\Logger\FileLogger.cs" />
     <Compile Include="Utils\Network\ApiService.cs" />
     <Compile Include="Utils\Security\AESHelper.cs" />
     <Compile Include="Utils\Storage\FileRepository.cs" />
