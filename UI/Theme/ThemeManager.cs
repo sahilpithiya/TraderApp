@@ -1,7 +1,7 @@
 ﻿using System;
 using System.Drawing;
 using System.Windows.Forms;
-using TraderApps;
+using TraderApps.Forms;
 
 namespace TraderApps.UI.Theme
 {

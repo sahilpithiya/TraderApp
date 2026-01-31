@@ -10,6 +10,7 @@ using System.Net.Http;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 using TraderApps.Config;
+using TraderApps.Forms;
 using TraderApps.Helpers;
 using TraderApps.Services;
 using TraderApps.UI.Theme;
@@ -21,6 +22,7 @@ namespace TraderApps.UI.Forms
     {
         #region Variables
         public static Home Instance;
+        private readonly AuthService _authService; // New Service Instance
 
         // Dockable panels
         private DockContent MarketwatchDock;
@@ -58,6 +60,10 @@ namespace TraderApps.UI.Forms
         {
             Instance = this;
             InitializeComponent();
+
+            // Initialize Service
+            _authService = new AuthService();
+
             ThemeManager.ApplyTheme(this);
             //SocketManager.OnForceLogout += SocketForceLogOut;
             dockPanel.Theme = new VS2015LightTheme();
@@ -81,15 +87,14 @@ namespace TraderApps.UI.Forms
         {
             ShowEmptyColoredLayout();
 
-            // 1. Hide Toolbar items initially
             this.toolStripSeparator6.Visible = false;
 
-            // 2. Load Server List
             await LoadServerListAsync();
 
-            // 3. Check for Saved Login
-            string filePath = Path.Combine(AppConfig.dataFolder, $"{AESHelper.ToBase64UrlSafe("LoginData")}.dat");
-            var loginInfoList = CommonHelper.LoadLoginDataFromCache(filePath);
+            // 3. Check for Saved Login (Refactored to use Service)
+            // string filePath = Path.Combine(AppConfig.dataFolder, $"{AESHelper.ToBase64UrlSafe("LoginData")}.dat");
+            // var loginInfoList = CommonHelper.LoadLoginDataFromCache(filePath);
+            var loginInfoList = _authService.GetLoginHistory();
 
             if (loginInfoList == null || !loginInfoList.Any())
             {
@@ -177,6 +182,11 @@ namespace TraderApps.UI.Forms
 
         private async Task LoadServerListAsync()
         {
+            // Refactored to use AuthService which handles File Check -> API fallback internally
+            await _authService.GetServerListAsync();
+
+            // Old Logic Removed (Handled by Service):
+            /*
             string folder = AESHelper.ToBase64UrlSafe("Servers");
             string file = AESHelper.ToBase64UrlSafe("ServerList");
             string encryptedContent = null;
@@ -187,6 +197,7 @@ namespace TraderApps.UI.Forms
             {
                 var result = await ServerService.GetServerListAsync();
             }
+            */
         }
 
         private async void ShowLoginForm()
@@ -619,8 +630,8 @@ namespace TraderApps.UI.Forms
             //}
             //else
             //{
-                GetOrCreate("Market Watch", () => CreateEmptyDockContentWithBorder("Market Watch"));
-                GetOrCreate("Details", () => CreateEmptyDockContentWithBorder("Details"));
+            GetOrCreate("Market Watch", () => CreateEmptyDockContentWithBorder("Market Watch"));
+            GetOrCreate("Details", () => CreateEmptyDockContentWithBorder("Details"));
             //}
         }
 

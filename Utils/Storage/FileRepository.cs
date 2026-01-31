@@ -1,52 +1,55 @@
 ﻿using Newtonsoft.Json;
 using System;
 using System.IO;
+using TraderApp.Interfaces;
 using TraderApps.Config;
 
 namespace TraderApps.Utils.Storage
 {
-    public class FileRepository<T>
+    public class FileRepository<T> : IRepository<T>
     {
-        private readonly string _filePath;
+        private readonly string _baseFolder;
 
-        public FileRepository(string fileName)
+        public FileRepository()
         {
-            // Folder create karo agar nahi hai
-            if (!Directory.Exists(AppConfig.AppDataPath))
-                Directory.CreateDirectory(AppConfig.AppDataPath);
-
-            _filePath = Path.Combine(AppConfig.AppDataPath, fileName + ".dat");
+            _baseFolder = AppConfig.AppDataPath;
+            if (!Directory.Exists(_baseFolder)) Directory.CreateDirectory(_baseFolder);
         }
 
-        public void Save(T data)
+        public void Save(string filename, T data)
         {
             try
             {
+                string path = Path.Combine(_baseFolder, filename + ".dat");
+
+                string directory = Path.GetDirectoryName(path);
+                if (!string.IsNullOrEmpty(directory) && !Directory.Exists(directory))
+                {
+                    Directory.CreateDirectory(directory);
+                }
+
+                // Serialize & Encrypt
                 string json = JsonConvert.SerializeObject(data);
                 string encrypted = AESHelper.CompressAndEncryptString(json);
-                File.WriteAllText(_filePath, encrypted);
+
+                File.WriteAllText(path, encrypted);
             }
-            catch (Exception ex)
-            {
-                // Logging kar sakte ho
-                Console.WriteLine($"Save Error: {ex.Message}");
-            }
+            catch (Exception ex) { Console.WriteLine("Save Error: " + ex.Message); }
         }
 
-        public T Load()
+        public T Load(string filename)
         {
-            if (!File.Exists(_filePath)) return default;
-
             try
             {
-                string encrypted = File.ReadAllText(_filePath);
+                string path = Path.Combine(_baseFolder, filename + ".dat");
+                if (!File.Exists(path)) return default;
+
+                string encrypted = File.ReadAllText(path);
                 string json = AESHelper.DecompressAndDecryptString(encrypted);
+
                 return JsonConvert.DeserializeObject<T>(json);
             }
-            catch
-            {
-                return default;
-            }
+            catch { return default; }
         }
     }
 }

@@ -1,33 +1,37 @@
-﻿using ClientDesktop;
-using ClientDesktop.Models;
-using Newtonsoft.Json;
+﻿using ClientDesktop.Models;
 using System;
 using System.Collections.Generic;
 using System.Drawing;
-using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 using System.Windows.Forms;
-using TraderApps.Config;
 using TraderApps.Helpers;
-using TraderApps.Models;
 using TraderApps.Services;
 using TraderApps.UI.Theme;
 
-namespace TraderApps
+namespace TraderApps.Forms
 {
     public partial class LoginPage : Form
     {
         #region Variables
+        private readonly AuthService _authService;
         private bool isSelectedServer;
         private string isValidated = string.Empty;
-        string filePath = Path.Combine(Path.Combine(AppConfig.dataFolder, $"{AESHelper.ToBase64UrlSafe("LoginData")}.dat"));
+
+        // Variables for Server Filter Logic (As per your request)
+        private List<ServerList> _allServers = new List<ServerList>();
+        private bool _updating = false;
+        private const int threshold = 3;
         #endregion
 
         #region Form Initialization
         public LoginPage()
         {
             InitializeComponent();
+
+            // Init Service
+            _authService = new AuthService();
+
             ThemeManager.ApplyTheme(this);
             ThemeManager.ApplyTheme(loginButton);
             ThemeManager.ApplyTheme(cancleButton);
@@ -43,14 +47,17 @@ namespace TraderApps
 
             // Attach event handlers
             this.AcceptButton = loginButton;
-            this.cmbLogin.KeyPress -= cmbLogin_KeyPress;
             this.cmbLogin.KeyPress += cmbLogin_KeyPress;
-            this.cmbServerName.TextChanged -= cmbServerName_TextChanged;
+
+            // Re-attached exactly as needed for your logic
             this.cmbServerName.TextChanged += cmbServerName_TextChanged;
-            this.cmbLogin.TextChanged -= cmbLogin_TextChanged;
+            this.cmbServerName.DropDown += CmbServerName_DropDown;
+            this.cmbServerName.KeyDown += CmbServerName_KeyDown;
+            this.cmbServerName.SelectionChangeCommitted += CmbServerName_SelectionChangeCommitted;
+
             this.cmbLogin.TextChanged += cmbLogin_TextChanged;
-            this.txtpassword.TextChanged -= txtpassword_TextChanged;
             this.txtpassword.TextChanged += txtpassword_TextChanged;
+            this.cmbLogin.Enter += cmbLogin_Enter;
         }
 
         private void ApplyResponsiveLayout()
@@ -69,9 +76,7 @@ namespace TraderApps
                 {
                     float originalSize = ctrl.Font.Size;
                     float scaledSize = CommonHelper.GetScaled(originalSize);
-
                     if (scaledSize < 9f) scaledSize = 9f;
-
                     ctrl.Font = new Font(ctrl.Font.FontFamily, scaledSize, ctrl.Font.Style, ctrl.Font.Unit);
                 }
             }
@@ -83,20 +88,14 @@ namespace TraderApps
         {
             string userId, password, licenseId;
 
-            // Validate user input
-            if (!ValidateLoginInput(out userId, out password, out licenseId))
-            {
-                return; // If validation fails, stop further execution
-            }
+            if (!ValidateLoginInput(out userId, out password, out licenseId)) return;
 
-            // Disable UI while authenticating
             loginButton.Enabled = false;
             cancleButton.Enabled = false;
             Cursor = Cursors.WaitCursor;
 
             try
             {
-                // Call the LoginAsync method
                 bool loginSuccess = await LoginAsync(userId, password, licenseId, checkBox1.Checked);
 
                 if (loginSuccess)
@@ -104,10 +103,9 @@ namespace TraderApps
                     this.DialogResult = DialogResult.OK;
                     this.Close();
                 }
-                else if (string.IsNullOrEmpty(isValidated))
+                else if (!string.IsNullOrEmpty(isValidated))
                 {
-                    //lblError.Text = "Login failed. Please check your credentials.";
-                    //// Needs to log - MessagePopup.ShowPopup(CommonMessages.Loginfaild, false);
+                    // Show error logic here if needed
                 }
             }
             finally
@@ -118,56 +116,51 @@ namespace TraderApps
             }
         }
 
-        public async Task<bool> LoginAsync(string userId, string password, string licenseId, bool isLastLogin = false)
+        public async Task<bool> LoginAsync(string userId, string password, string licenseId, bool isRemember = false)
         {
-            // Proceed with authentication
             SessionManager.SetSession(string.Empty, userId, string.Empty ?? userId, licenseId, null, password);
-
-            // Disable UI during authentication
-            loginButton.Enabled = false;
-            cancleButton.Enabled = false;
-            Cursor = Cursors.WaitCursor;
 
             try
             {
-                var result = await AuthService.AuthenticateAsync(userId, password, licenseId);
+                var result = await _authService.LoginAsync(userId, password, licenseId, isRemember);
 
                 if (!result.Success)
                 {
-                    isValidated = result.ErrorMessage;
-                    //// Needs to add into log MessagePopup.ShowPopup(result.ErrorMessage, false);
+                    isValidated = result.Message;
                     return false;
                 }
 
-                var data = result.ResponseData;
-                // Save to session
+                var data = result.Data;
                 DateTime? exp = null;
                 if (DateTime.TryParse(data.expiration, out var dt)) exp = dt;
 
-                // Proceed with session management and storing login data
                 SessionManager.SetSession(data.token, userId, data.name ?? userId, licenseId, exp, password);
-                SetSessionAndStoreLoginData(userId, password, licenseId, isLastLogin);
-                await AuthService.AuthenticateAsyncGET();
+
+                var profileResult = await _authService.GetUserProfileAsync();
+
+                if (profileResult != null && profileResult.isSuccess && profileResult.data != null)
+                {
+                    SocketLoginInfo socketInfo = new SocketLoginInfo
+                    {
+                        UserSubId = profileResult.data.sub,
+                        UserIss = profileResult.data.iss,
+                        LicenseId = SessionManager.LicenseId,
+                        Intime = profileResult.data.intime,
+                        Role = profileResult.data.role,
+                        IpAddress = profileResult.data.ip,
+                        Device = "Windows"
+                    };
+
+                    SessionManager.socketLoginInfos = socketInfo;
+                    SessionManager.IsPasswordReadOnly = profileResult.data.isreadonlypassword;
+                }
 
                 return true;
             }
-            finally
+            catch
             {
-                loginButton.Enabled = true;
-                cancleButton.Enabled = true;
-                Cursor = Cursors.Default;
+                return false;
             }
-        }
-
-        private void SetSessionAndStoreLoginData(string username, string password, string licenseId, bool isRemember)
-        {
-            // Remember me logic
-            try
-            {
-                _ = CommonHelper.StoreLoginDataAsync(Path.Combine(AppConfig.dataFolder, $"{AESHelper.ToBase64UrlSafe("LoginData")}.dat"), password, isRemember);
-            }
-            catch { }
-
         }
 
         private bool ValidateLoginInput(out string username, out string password, out string licenseId)
@@ -178,7 +171,7 @@ namespace TraderApps
 
             bool isValid = true;
 
-            if (string.IsNullOrEmpty(SessionManager.Username) || string.IsNullOrEmpty(SessionManager.Password) || string.IsNullOrEmpty(SessionManager.LicenseId))
+            if (string.IsNullOrEmpty(SessionManager.Username) || string.IsNullOrEmpty(password) || string.IsNullOrEmpty(licenseId))
             {
                 username = cmbLogin.Text?.Trim();
                 password = txtpassword.Text ?? string.Empty;
@@ -193,27 +186,12 @@ namespace TraderApps
                 checkBox1.Checked = true;
             }
 
-            if (string.IsNullOrEmpty(username))
-            {
-                cmbLogin.BackColor = ThemeManager.LightRed;
-                isValid = false;
-            }
-
-            if (string.IsNullOrEmpty(password))
-            {
-                txtpassword.BackColor = ThemeManager.LightRed;
-                isValid = false;
-            }
-
-            if (string.IsNullOrEmpty(licenseId) && (cmbServerName.SelectedItem == null || string.IsNullOrEmpty(cmbServerName.Text)))
-            {
-                cmbServerName.BackColor = ThemeManager.LightRed;
-                isValid = false;
-            }
+            if (string.IsNullOrEmpty(username)) { cmbLogin.BackColor = ThemeManager.LightRed; isValid = false; }
+            if (string.IsNullOrEmpty(password)) { txtpassword.BackColor = ThemeManager.LightRed; isValid = false; }
+            if (string.IsNullOrEmpty(licenseId) && (cmbServerName.SelectedItem == null)) { cmbServerName.BackColor = ThemeManager.LightRed; isValid = false; }
 
             return isValid;
         }
-
         #endregion
 
         #region Server List Management
@@ -222,158 +200,138 @@ namespace TraderApps
             try
             {
                 Cursor = Cursors.WaitCursor;
-                var serverList = SessionManager.ServerListData;
 
-                string folder = AESHelper.ToBase64UrlSafe("Servers");
-                string file = AESHelper.ToBase64UrlSafe("ServerList");
-                string encryptedContent = null;
+                // 1. Get Data from Service (Handles Local File -> API internally)
+                var serverList = await _authService.GetServerListAsync();
 
-                // Try to read local encrypted file (if exists)
-                string encryptedFilePath = Path.Combine(AppConfig.dataFolder, folder, $"{file}.dat");
-                if (File.Exists(encryptedFilePath))
+                // 2. Setup List
+                if (serverList != null && serverList.Count > 0)
                 {
-                    encryptedContent = File.ReadAllText(encryptedFilePath);
-
-                    string encrptedFilejson = AESHelper.DecompressAndDecryptString(encryptedContent);
-                    var fallbackParsed = JsonConvert.DeserializeObject<ServerListResponse>(encrptedFilejson);
-
-                    serverList = fallbackParsed?.data?.licenseDetail;
                     SessionManager.SetServerList(serverList);
+                    _allServers = serverList;
                 }
-                else if (serverList == null)
+                else
                 {
-                    var result = await ServerService.GetServerListAsync();
-                    if (!result.Success)
-                    {
-                        Console.WriteLine("Failed to load server list: " + result.ErrorMessage);
-                        return;
-                    }
-
-                    serverList = result.Servers;
-                    if (serverList == null || serverList.Count == 0)
-                    {
-                        //// Needs to add Log MessagePopup.ShowPopup(CommonMessages.NoServerAvailable);
-                        return;
-                    }
-
-                    // Save globally
-                    SessionManager.SetServerList(serverList);
+                    _allServers = new List<ServerList>();
                 }
 
-                int threshold = 3;
-                var allServers = (serverList != null) ? serverList : new List<ServerList>();
-
+                // 3. Setup Combo Properties
                 cmbServerName.DropDownStyle = ComboBoxStyle.DropDown;
-                cmbServerName.AutoCompleteMode = AutoCompleteMode.None;   // avoid fights with Items updates
+                cmbServerName.AutoCompleteMode = AutoCompleteMode.None; // Avoid native fights
                 cmbServerName.AutoCompleteSource = AutoCompleteSource.None;
 
                 cmbServerName.DisplayMember = nameof(ServerList.companyName);
                 cmbServerName.ValueMember = nameof(ServerList.licenseId);
 
-                cmbServerName.Items.Clear();      // start empty
-                cmbServerName.SelectedIndex = -1; // no preselect
-
-                bool _updating = false;
-
-                // Filter helper
-                List<ServerList> Filter(string input)
-                {
-                    if (string.IsNullOrWhiteSpace(input)) return new List<ServerList>();
-                    input = input.Trim();
-                    if (input.Length < threshold) return new List<ServerList>();
-
-                    return allServers
-                        .Where(s => (s.companyName ?? string.Empty)
-                            .IndexOf(input, StringComparison.OrdinalIgnoreCase) >= 0)
-                        .Take(20) // cap results (security/UX)
-                        .ToList();
-                }
-
-                // TextChanged: update Items only, preserve user typing
-                cmbServerName.TextChanged += (s, e) =>
-                {
-                    if (!isSelectedServer)
-                    {
-
-                        if (_updating) return;
-                        _updating = true;
-                        try
-                        {
-                            var txt = cmbServerName.Text ?? string.Empty;
-                            var caret = cmbServerName.SelectionStart;
-
-                            var results = Filter(txt);
-
-                            cmbServerName.BeginUpdate();
-                            try
-                            {
-                                // Close before modifying list to avoid native glitches
-                                cmbServerName.DroppedDown = false;
-
-                                cmbServerName.Items.Clear();
-                                if (results.Count > 0)
-                                {
-                                    // Add matching objects directly; DisplayMember handles text
-                                    foreach (var item in results)
-                                        cmbServerName.Items.Add(item);
-
-                                    // Open dropdown AFTER items are ready
-                                    // Do it with BeginInvoke to avoid re-entrancy
-                                    cmbServerName.BeginInvoke(new Action(() =>
-                                    {
-                                        if (!cmbServerName.IsDisposed && cmbServerName.IsHandleCreated && (cmbServerName.Text ?? "").Trim().Length >= threshold)
-                                            cmbServerName.DroppedDown = true;
-                                    }));
-                                }
-                            }
-                            finally { cmbServerName.EndUpdate(); }
-
-                            // Restore what user typed + caret
-                            cmbServerName.SelectedIndex = -1;   // prevent auto-select overriding text
-                            cmbServerName.Text = txt;
-                            cmbServerName.SelectionStart = Math.Min(caret, cmbServerName.Text.Length);
-                            cmbServerName.SelectionLength = 0;
-                        }
-                        finally { _updating = false; }
-                    }
-                };
-
-                // User tries to open dropdown manually before threshold? Block it.
-                cmbServerName.DropDown += (s, e) =>
-                {
-                    var txt = (cmbServerName.Text ?? string.Empty).Trim();
-                    if (txt.Length < threshold)
-                        cmbServerName.DroppedDown = false;
-                };
-
-                // When user picks an item, set Text accordingly (optional, usually auto)
-                cmbServerName.SelectionChangeCommitted += (s, e) =>
-                {
-                    if (cmbServerName.SelectedItem is ServerList sel)
-                        cmbServerName.Text = sel.companyName ?? string.Empty;
-                };
-
-                // Optional: ESC clears local suggestions only (doesn't close your owner form)
-                cmbServerName.KeyDown += (s, e) =>
-                {
-                    if (e.KeyCode == Keys.Escape)
-                    {
-                        cmbServerName.DroppedDown = false;
-                        cmbServerName.Items.Clear();
-                        cmbServerName.SelectedIndex = -1;
-                        // don't forcibly clear Text unless you want to
-                        e.Handled = true;
-                    }
-                };
-
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine("Error loading server list: " + ex.Message);
+                cmbServerName.Items.Clear();      // Start empty
+                cmbServerName.SelectedIndex = -1; // No preselect
             }
             finally
             {
                 Cursor = Cursors.Default;
+            }
+        }
+
+        // Helper Filter Method (Same as your snippet)
+        private List<ServerList> Filter(string input)
+        {
+            if (string.IsNullOrWhiteSpace(input)) return new List<ServerList>();
+            input = input.Trim();
+            if (input.Length < threshold) return new List<ServerList>();
+
+            return _allServers
+                .Where(s => (s.companyName ?? string.Empty)
+                    .IndexOf(input, StringComparison.OrdinalIgnoreCase) >= 0)
+                .Take(20)
+                .ToList();
+        }
+
+        // TEXT CHANGED LOGIC (Exact restore with Cursor Fix)
+        private void cmbServerName_TextChanged(object sender, EventArgs e)
+        {
+            if (isSelectedServer) return;
+
+            if (_updating) return;
+            _updating = true;
+
+            try
+            {
+                // 1. Save current state
+                var txt = cmbServerName.Text ?? string.Empty;
+                var caret = cmbServerName.SelectionStart;
+
+                // 2. Get Results
+                var results = Filter(txt);
+
+                // 3. UI Update
+                if (!string.IsNullOrEmpty(txt))
+                {
+                    cmbServerName.BackColor = ThemeManager.White;
+                    cmbLogin.Text = string.Empty;
+                    SessionManager.LastSelectedLogin = (string.Empty, string.Empty, string.Empty);
+                }
+                else
+                {
+                    cmbServerName.BackColor = ThemeManager.LightRed;
+                }
+
+                cmbServerName.BeginUpdate();
+                try
+                {
+                    // Close before modifying list to avoid native glitches
+                    cmbServerName.DroppedDown = false;
+
+                    cmbServerName.Items.Clear();
+                    if (results.Count > 0)
+                    {
+                        // Add matching objects directly; DisplayMember handles text
+                        foreach (var item in results)
+                            cmbServerName.Items.Add(item);
+
+                        // Open dropdown AFTER items are ready
+                        // Do it with BeginInvoke to avoid re-entrancy
+                        cmbServerName.BeginInvoke(new Action(() =>
+                        {
+                            if (!cmbServerName.IsDisposed && cmbServerName.IsHandleCreated && (cmbServerName.Text ?? "").Trim().Length >= threshold)
+                                cmbServerName.DroppedDown = true;
+                        }));
+                    }
+                }
+                finally { cmbServerName.EndUpdate(); }
+
+                // 4. RESTORE CURSOR & TEXT (This fixes the jumping)
+                cmbServerName.SelectedIndex = -1;   // prevent auto-select overriding text
+                cmbServerName.Text = txt;
+                cmbServerName.SelectionStart = Math.Min(caret, cmbServerName.Text.Length);
+                cmbServerName.SelectionLength = 0;
+            }
+            finally
+            {
+                _updating = false;
+            }
+        }
+
+        private void CmbServerName_DropDown(object sender, EventArgs e)
+        {
+            var txt = (cmbServerName.Text ?? string.Empty).Trim();
+            if (txt.Length < threshold)
+                cmbServerName.DroppedDown = false;
+        }
+
+        private void CmbServerName_SelectionChangeCommitted(object sender, EventArgs e)
+        {
+            if (cmbServerName.SelectedItem is ServerList sel)
+                cmbServerName.Text = sel.companyName ?? string.Empty;
+        }
+
+        private void CmbServerName_KeyDown(object sender, KeyEventArgs e)
+        {
+            if (e.KeyCode == Keys.Escape)
+            {
+                cmbServerName.DroppedDown = false;
+                cmbServerName.Items.Clear();
+                cmbServerName.SelectedIndex = -1;
+                e.Handled = true;
             }
         }
         #endregion
@@ -381,98 +339,61 @@ namespace TraderApps
         #region Form Events
         private async void LoginPage_Load(object sender, EventArgs e)
         {
-            // Load server list first
             await LoadServerListAsync();
 
-            string currentLicenseId = string.Empty;
-            string currentUserId = string.Empty;
+            string cLic = SessionManager.LastSelectedLogin.LicenseId;
+            string cUser = SessionManager.LastSelectedLogin.UserId;
 
-            if (!string.IsNullOrEmpty(SessionManager.LastSelectedLogin.UserId) && !string.IsNullOrEmpty(SessionManager.LastSelectedLogin.LicenseId))
+            if (string.IsNullOrEmpty(cLic)) cLic = SessionManager.LicenseId;
+            if (string.IsNullOrEmpty(cUser)) cUser = SessionManager.UserId;
+
+            if (!string.IsNullOrEmpty(cLic))
             {
-                currentLicenseId = SessionManager.LastSelectedLogin.LicenseId;
-                currentUserId = SessionManager.LastSelectedLogin.UserId;
-            }
-            else if (!string.IsNullOrEmpty(SessionManager.LicenseId) && cmbServerName != null && cmbServerName.SelectedValue == null)
-            {
-                currentLicenseId = SessionManager.LicenseId;
-                currentUserId = SessionManager.UserId;
-            }
-
-            if (string.IsNullOrEmpty(currentLicenseId) && string.IsNullOrEmpty(currentUserId)) return;
-
-            var selectedServer = SessionManager.ServerListData?
-                .FirstOrDefault(s => s.licenseId.ToString() == currentLicenseId);
-
-            if (selectedServer != null)
-            {
-                // 1️⃣ Ensure the combo knows how to display ServerList
-                cmbServerName.DisplayMember = nameof(selectedServer.companyName);
-                cmbServerName.ValueMember = nameof(selectedServer.licenseId);
-
-                // 2️⃣ Ensure Items list contains that server (if not, add it)
-                var existing = cmbServerName.Items
-                    .OfType<ServerList>()
-                    .FirstOrDefault(s => s.licenseId == selectedServer.licenseId);
-
-                if (existing == null)
+                var server = SessionManager.ServerListData?.FirstOrDefault(s => s.licenseId.ToString() == cLic);
+                if (server != null)
                 {
-                    cmbServerName.Items.Add(selectedServer);
-                    existing = selectedServer;
-                }
+                    isSelectedServer = true;
 
-                cmbServerName.DroppedDown = false;
+                    // Add server to items so it can be selected properly
+                    if (!cmbServerName.Items.Cast<ServerList>().Any(s => s.licenseId == server.licenseId))
+                    {
+                        cmbServerName.Items.Add(server);
+                    }
 
-                isSelectedServer = true;
-                // 3️⃣ Set the selected item *as object*, not text/value only
-                cmbServerName.SelectedItem = existing;
-                isSelectedServer = false;
+                    // Select it
+                    foreach (var item in cmbServerName.Items)
+                    {
+                        if (item is ServerList s && s.licenseId == server.licenseId)
+                        {
+                            cmbServerName.SelectedItem = item;
+                            break;
+                        }
+                    }
 
-                // 4️⃣ Ensure the visible text updates (it will, because DisplayMember is set)
-                cmbServerName.Text = existing.companyName ?? string.Empty;
+                    isSelectedServer = false;
+                    cmbServerName.Text = server.companyName;
 
-                cmbServerName.BeginInvoke(new Action(() =>
-                {
-                    if (!cmbServerName.IsDisposed && cmbServerName.IsHandleCreated)
-                        cmbServerName.DroppedDown = false;
-                }));
-
-                if (!string.IsNullOrEmpty(currentUserId))
-                {
-                    cmbLogin.Text = currentUserId;
+                    cmbServerName.BeginInvoke(new Action(() =>
+                    {
+                        if (!cmbServerName.IsDisposed && cmbServerName.IsHandleCreated)
+                            cmbServerName.DroppedDown = false;
+                    }));
                 }
             }
+
+            if (!string.IsNullOrEmpty(cUser)) cmbLogin.Text = cUser;
         }
         #endregion
 
         #region UI Event Handlers
-
-        private void eyePictureBox_Click(object sender, EventArgs e)
-        {
-            try
-            {
-                if (this.txtpassword.PasswordChar == '*')
-                {
-                    this.txtpassword.PasswordChar = '\0';
-                    this.eyePictureBox.Image = TraderApp.Properties.Resources.eye_open;
-                }
-                else
-                {
-                    this.txtpassword.PasswordChar = '*';
-                    this.eyePictureBox.Image = TraderApp.Properties.Resources.eye_close;
-                }
-            }
-            catch { }
-        }
-
         private void cmbLogin_Enter(object sender, EventArgs e)
         {
-            var loginInfoList = CommonHelper.LoadLoginDataFromCache(filePath);
+            // Use Service for History
+            var loginInfoList = _authService.GetLoginHistory();
+
             if (loginInfoList != null && loginInfoList.Count > 0)
             {
-                // Clear existing items in ComboBox
                 cmbLogin.Items.Clear();
-
-                // Populate ComboBox with UserId from each login information object
                 foreach (var loginInfo in loginInfoList)
                 {
                     if (cmbServerName.SelectedItem is ServerList sel)
@@ -482,36 +403,7 @@ namespace TraderApps
                             cmbLogin.Items.Add(loginInfo.UserId);
                         }
                     }
-
                 }
-            }
-        }
-
-        private void cancleButton_Click(object sender, EventArgs e)
-        {
-            this.Close();
-        }
-
-        private void cmbLogin_KeyPress(object sender, KeyPressEventArgs e)
-        {
-            // Allow only numeric input (0-9), backspace, and other control characters
-            if (!char.IsDigit(e.KeyChar) && e.KeyChar != (char)Keys.Back)
-            {
-                e.Handled = true;
-            }
-        }
-
-        private void cmbServerName_TextChanged(object sender, EventArgs e)
-        {
-            if (!string.IsNullOrEmpty(cmbServerName.Text))
-            {
-                cmbServerName.BackColor = ThemeManager.White;
-                cmbLogin.Text = string.Empty;
-                SessionManager.LastSelectedLogin = (string.Empty, string.Empty, string.Empty);
-            }
-            else
-            {
-                cmbServerName.BackColor = ThemeManager.LightRed;
             }
         }
 
@@ -523,15 +415,11 @@ namespace TraderApps
             }
             else
             {
-                var loginInfo = CommonHelper.LoadLoginDataFromCache(filePath)?
-                .FirstOrDefault(s =>
+                var history = _authService.GetLoginHistory();
+                var loginInfo = history?.FirstOrDefault(s =>
                     s != null &&
                     string.Equals(s.UserId, cmbLogin.Text, StringComparison.Ordinal) &&
-                    s.ServerListData != null &&
-                    s.ServerListData.Any(q =>
-                        string.Equals(q.companyName, cmbServerName.Text, StringComparison.Ordinal) &&
-                        string.Equals(q.licenseId.ToString(), s.LicenseId, StringComparison.Ordinal)
-                    )
+                    (cmbServerName.SelectedItem is ServerList sel && sel.licenseId.ToString() == s.LicenseId)
                 );
 
                 if (loginInfo != null && !string.IsNullOrEmpty(loginInfo.Password))
@@ -544,34 +432,41 @@ namespace TraderApps
                     txtpassword.Text = string.Empty;
                     checkBox1.Checked = false;
                 }
-
                 cmbLogin.BackColor = ThemeManager.White;
             }
         }
 
         private void txtpassword_TextChanged(object sender, EventArgs e)
         {
-            if (!string.IsNullOrEmpty(txtpassword.Text))
+            txtpassword.BackColor = !string.IsNullOrEmpty(txtpassword.Text) ? ThemeManager.White : ThemeManager.LightRed;
+        }
+
+        private void eyePictureBox_Click(object sender, EventArgs e)
+        {
+            if (txtpassword.PasswordChar == '*')
             {
-                txtpassword.BackColor = ThemeManager.White;
+                txtpassword.PasswordChar = '\0';
+                eyePictureBox.Image = TraderApp.Properties.Resources.eye_open;
             }
             else
             {
-                txtpassword.BackColor = ThemeManager.LightRed;
+                txtpassword.PasswordChar = '*';
+                eyePictureBox.Image = TraderApp.Properties.Resources.eye_close;
             }
         }
 
-        #endregion
+        private void cmbLogin_KeyPress(object sender, KeyPressEventArgs e)
+        {
+            if (!char.IsDigit(e.KeyChar) && e.KeyChar != (char)Keys.Back) e.Handled = true;
+        }
 
-        #region Utility Methods
+        private void cancleButton_Click(object sender, EventArgs e) => this.Close();
+
         private void CenterControls()
         {
-            int formCenter = this.ClientSize.Width / 2;
-            // Group button set center
-            int totalBtnWidth = loginButton.Width + 20 + cancleButton.Width;
-            int leftStart = formCenter - (totalBtnWidth / 2);
-
-            loginButton.Left = leftStart;
+            int center = this.ClientSize.Width / 2;
+            int totalW = loginButton.Width + 20 + cancleButton.Width;
+            loginButton.Left = center - (totalW / 2);
             cancleButton.Left = loginButton.Right + 10;
         }
         #endregion

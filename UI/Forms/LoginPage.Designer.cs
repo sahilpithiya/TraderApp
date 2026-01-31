@@ -1,4 +1,4 @@
-﻿namespace TraderApps
+﻿namespace TraderApps.Forms
 {
     partial class LoginPage
     {

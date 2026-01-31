@@ -2,99 +2,143 @@
 using Newtonsoft.Json;
 using System;
 using System.Collections.Generic;
-using System.Net.Http;
+using System.IO;
+using System.Linq;
 using System.Threading.Tasks;
+using TraderApp.Interfaces;
+using TraderApp.Utils.Network;
 using TraderApps.Config;
 using TraderApps.Helpers;
-using TraderApps.Models;
+using TraderApps.Utils.Storage;
 
 namespace TraderApps.Services
 {
     public class AuthService
     {
-        #region Variables And Configuration
-        private static readonly HttpClient _http = new HttpClient();
-        public static string AuthUrl => AppConfig.AuthURL;
+        private readonly IRepository<List<LoginInfo>> _loginRepo;
+        private readonly IRepository<List<ServerList>> _serverRepo;
+        private readonly IApiService _apiService;
+
+        public AuthService()
+        {
+            _loginRepo = new FileRepository<List<LoginInfo>>();
+            _serverRepo = new FileRepository<List<ServerList>>();
+            _apiService = new ApiService();
+        }
+
+        #region Server Management
+
+        public async Task<List<ServerList>> GetServerListAsync()
+        {
+            string folderName = AESHelper.ToBase64UrlSafe("Servers");
+            string fileName = AESHelper.ToBase64UrlSafe("ServerList");
+
+            string relativePath = Path.Combine(folderName, fileName);
+
+            var cachedList = _serverRepo.Load(relativePath);
+            if (cachedList != null && cachedList.Count > 0)
+            {
+                return cachedList;
+            }
+
+            try
+            {
+                var response = await _apiService.GetAsync<ServerListResponse>(AppConfig.ServerListURL);
+                if (response?.data?.licenseDetail != null)
+                {
+                    _serverRepo.Save(relativePath, response.data.licenseDetail);
+                    return response.data.licenseDetail;
+                }
+            }
+            catch { }
+
+            return new List<ServerList>();
+        }
         #endregion
 
-        #region Authentication Method
-        public static async Task<(bool Success, string ErrorMessage, AuthResponseData ResponseData)> AuthenticateAsync(
-            string username, string password, string licenseId)
+        #region Login & Auth
+        public async Task<(bool Success, string Message, AuthResponseData Data)> LoginAsync(string user, string pass, string licenseId, bool isRemember)
+        {
+            var formData = new Dictionary<string, string>
+            {
+                { "username", user },
+                { "password", pass },
+                { "licenseId", licenseId }
+            };
+
+            string url = CommonHelper.ToReplaceUrl(AppConfig.AuthURL);
+
+            // 1. Call API
+            var result = await _apiService.PostFormAsync<AuthResponse>(url, formData);
+
+            if (result != null && result.isSuccess && result.data != null)
+            {
+                // 2. Save Login History on success (Logic from CommonHelper moved here)
+                SaveLoginHistory(user, pass, licenseId, isRemember);
+                return (true, "Success", result.data);
+            }
+
+            return (false, result?.successMessage ?? "Login Failed", null);
+        }
+
+        public async Task<AuthResponseObj> GetUserProfileAsync()
         {
             try
             {
-                var formContent = new FormUrlEncodedContent(new[]
-                {
-                    new KeyValuePair<string, string>("username", username),
-                    new KeyValuePair<string, string>("password", password),
-                    new KeyValuePair<string, string>("licenseId", licenseId)
-                });
-
-                using (var resp = await _http.PostAsync(AuthUrl.ToReplaceUrl(), formContent).ConfigureAwait(false))
-                {
-                    var respString = await resp.Content.ReadAsStringAsync().ConfigureAwait(false);
-
-                    if (!resp.IsSuccessStatusCode)
-                        return (false,
-                            JsonConvert.DeserializeObject<dynamic>(respString)?
-                            .exception?.message?.ToString()
-                            ?? $"{(int)resp.StatusCode}: {resp.ReasonPhrase}", null);
-
-                    var authResp = JsonConvert.DeserializeObject<AuthResponse>(respString);
-                    if (authResp == null)
-                        return (false, "Invalid response from server", null);
-
-                    if (!authResp.isSuccess || authResp.data == null)
-                        return (false, authResp.successMessage ?? "Login failed", null);
-
-                    return (true, null, authResp.data);
-                }
+                string url = CommonHelper.ToReplaceUrl(AppConfig.AuthURL);
+                return await _apiService.GetAsync<AuthResponseObj>(url);
             }
-            catch (Exception ex)
+            catch
             {
-                return (false, ex.Message, null);
+                return null;
             }
         }
 
-        public static async Task AuthenticateAsyncGET()
+        public void SaveLoginHistory(string user, string pass, string licenseId, bool isRemember)
         {
-            try
+            string fileName = AESHelper.ToBase64UrlSafe("LoginData");
+
+            var list = _loginRepo.Load(fileName) ?? new List<LoginInfo>();
+
+            var existingUser = list.FirstOrDefault(u => u.UserId == user && u.LicenseId == licenseId);
+
+            if (existingUser != null)
             {
-                _http.AddAuthHeader();
-                using (var resp = await _http.GetAsync(AuthUrl.ToReplaceUrl()).ConfigureAwait(false))
+                existingUser.LicenseId = SessionManager.LicenseId;
+                existingUser.Expiration = SessionManager.Expiration;
+                existingUser.ServerListData = SessionManager.ServerListData;
+                existingUser.Password = isRemember ? pass : string.Empty;
+                existingUser.LastLogin = true;
+            }
+            else
+            {
+                list.Add(new LoginInfo
                 {
-                    var respString = await resp.Content.ReadAsStringAsync().ConfigureAwait(false);
+                    UserId = user,
+                    Username = SessionManager.Username,
+                    LicenseId = licenseId,
+                    Expiration = SessionManager.Expiration,
+                    ServerListData = SessionManager.ServerListData,
+                    Password = isRemember ? pass : string.Empty,
+                    LastLogin = true
+                });
+            }
 
-                    if (!resp.IsSuccessStatusCode)
-                        return;
-
-                    var authResp = JsonConvert.DeserializeObject<AuthResponseObj>(respString);
-                    if (authResp == null)
-                        return;
-
-                    if (!authResp.isSuccess || authResp.data == null)
-                        return;
-
-                    if (authResp.data != null)
-                    {
-                        SocketLoginInfo socketInfo = new SocketLoginInfo();
-                        socketInfo.UserSubId = authResp.data.sub;
-                        socketInfo.UserIss = authResp.data.iss;
-                        socketInfo.LicenseId = SessionManager.LicenseId;
-                        socketInfo.Intime = authResp.data.intime;
-                        socketInfo.Role = authResp.data.role;
-                        socketInfo.IpAddress = authResp.data.ip;
-                        socketInfo.Device = "Windows";
-
-                        SessionManager.socketLoginInfos = socketInfo;
-                        SessionManager.IsPasswordReadOnly = authResp.data.isreadonlypassword;
-                    }
+            foreach (var u in list)
+            {
+                if (u.UserId != user || u.LicenseId != licenseId)
+                {
+                    u.LastLogin = false;
                 }
             }
-            catch (Exception ex)
-            {
-                Console.WriteLine("Error From AuthenticateAsyncGET - " + ex.Message);
-            }
+
+            _loginRepo.Save(fileName, list);
+        }
+
+        public List<LoginInfo> GetLoginHistory()
+        {
+            string fileName = AESHelper.ToBase64UrlSafe("LoginData");
+            return _loginRepo.Load(fileName) ?? new List<LoginInfo>();
         }
         #endregion
     }
