@@ -30,7 +30,6 @@ namespace TraderApp.UI.Usercontrol
         private static ClientDetails skt_ClientDetail;
         private bool positionGridIsLoaded = false;
         private string currentActiveTab = "Position"; // Default start
-        private List<string[]> _journalCache = new List<string[]>();
 
         private Timer _priceUpdateTimer;
         private static readonly HttpClient _http = new HttpClient();
@@ -105,26 +104,15 @@ namespace TraderApp.UI.Usercontrol
             this.TypeCombo.SelectedIndexChanged += ComboFilter_SelectedIndexChanged;
             this.EntryCombo.SelectedIndexChanged += ComboFilter_SelectedIndexChanged;
 
-            FileLogger.OnLogReceived = this.ReceiveJournalLog;
-
             // Default load
-            //LoadHistoryView();
+            LoadHistoryView();
         }
 
-        public void LoadData()
-        {
-            if (tabControlDetails.SelectedTab == tabHistory)
-                ShowHistoryTab();
-            else
-                ShowJournalTab();
-        }
-        
         // Logic to handle tab switching
         private void TabControlDetails_SelectedIndexChanged(object sender, EventArgs e)
         {
             if (tabControlDetails.SelectedTab == tabHistory)
             {
-                FileLogger.Log("Testing", "Tab switched to History");
                 ShowHistoryTab(); // ✅ LoadHistoryView ki jagah ye naya method use karenge
             }
             else if (tabControlDetails.SelectedTab == tabJournal)
@@ -188,51 +176,16 @@ namespace TraderApp.UI.Usercontrol
             journalDataGrid = CreateNewDataGridView();
             mainContainer.Controls.Add(journalDataGrid);
 
-            // 3 Columns Define
-            journalDataGrid.Columns.Add(new DataGridViewTextBoxColumn { Name = "Time", HeaderText = "Time", DataPropertyName = "Time", SortMode = DataGridViewColumnSortMode.Automatic, MinimumWidth = CommonHelper.GetScaled(200) });
-            journalDataGrid.Columns.Add(new DataGridViewTextBoxColumn { Name = "Source", HeaderText = "Source", DataPropertyName = "Source", SortMode = DataGridViewColumnSortMode.Automatic, MinimumWidth = CommonHelper.GetScaled(150) });
-            journalDataGrid.Columns.Add(new DataGridViewTextBoxColumn { Name = "Message", HeaderText = "Message", DataPropertyName = "Message", SortMode = DataGridViewColumnSortMode.Automatic, MinimumWidth = CommonHelper.GetScaled(400) });
+            // Columns Add karo
+            journalDataGrid.Columns.Add(new DataGridViewTextBoxColumn { Name = "Time", HeaderText = "Time", DataPropertyName = "Time", MinimumWidth = CommonHelper.GetScaled(200) });
+            journalDataGrid.Columns.Add(new DataGridViewTextBoxColumn { Name = "Dealer", HeaderText = "Dealer", DataPropertyName = "Dealer", MinimumWidth = CommonHelper.GetScaled(200) });
+            journalDataGrid.Columns.Add(new DataGridViewTextBoxColumn { Name = "Login", HeaderText = "Login", DataPropertyName = "Login", MinimumWidth = CommonHelper.GetScaled(150) });
+            journalDataGrid.Columns.Add(new DataGridViewTextBoxColumn { Name = "Request", HeaderText = "Request", DataPropertyName = "Request", MinimumWidth = CommonHelper.GetScaled(250) });
+            journalDataGrid.Columns.Add(new DataGridViewTextBoxColumn { Name = "Answer", HeaderText = "Answer", DataPropertyName = "Answer", MinimumWidth = CommonHelper.GetScaled(250) });
 
-            // ✅ Load saved logs from File (Using AppConfig.AppDataPath)
-            if (_journalCache.Count == 0)
-            {
-                try
-                {
-                    // ✅ CHANGE: Path updated here
-                    string logDir = Path.Combine(AppConfig.AppDataPath, "Logs");
-                    string logFile = Path.Combine(logDir, DateTime.Now.ToString("yyyyMMdd") + ".log");
-
-                    if (File.Exists(logFile))
-                    {
-                        var lines = File.ReadAllLines(logFile);
-                        Array.Reverse(lines); // Newest on Top
-
-                        foreach (var line in lines)
-                        {
-                            var parts = line.Split('\t');
-                            if (parts.Length == 3)
-                            {
-                                _journalCache.Add(parts);
-                            }
-                        }
-                    }
-                }
-                catch (Exception ex)
-                {
-                    Console.WriteLine("Error loading logs: " + ex.Message);
-                }
-            }
-
-            // Cache se Grid me Data Load karo
-            foreach (var log in _journalCache)
-            {
-                journalDataGrid.Rows.Add(log[0], log[1], log[2]);
-            }
-
-            if (_journalCache.Count == 0)
-            {
-                FileLogger.Log("System", "Journal Initialized");
-            }
+            // Dummy Data
+            journalDataGrid.Rows.Add(DateTime.Now.ToString("dd/MM/yyyy HH:mm:ss"), "Main Server", SessionManager.UserId ?? "88001", "Auth Request: Login", "Authorized");
+            journalDataGrid.Rows.Add(DateTime.Now.AddSeconds(-45).ToString("dd/MM/yyyy HH:mm:ss"), "Main Server", SessionManager.UserId ?? "88001", "Data Subscribe: EURUSD", "Success");
 
             journalDataGrid.Visible = true;
         }
@@ -369,24 +322,6 @@ namespace TraderApp.UI.Usercontrol
             // Assign to DataGridView
             ////if (historyDataGrid != null)
             ////    historyDataGrid.ContextMenuStrip = contextMenu;
-        }
-
-        private void ReceiveJournalLog(string time, string source, string message)
-        {
-            if (this.InvokeRequired)
-            {
-                this.Invoke(new Action(() => ReceiveJournalLog(time, source, message)));
-                return;
-            }
-
-            // Cache me add karo
-            _journalCache.Insert(0, new string[] { time, source, message });
-
-            // Grid me add karo agar wo bana hua hai
-            if (journalDataGrid != null && !journalDataGrid.IsDisposed)
-            {
-                journalDataGrid.Rows.Insert(0, time, source, message);
-            }
         }
 
         private void AddMenuItem(string text, EventHandler onClick, bool isCheckable = false, bool isChecked = false)
