@@ -10,6 +10,7 @@ using System.Net.Http;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 using TraderApp.UI.Usercontrol;
+using TraderApp.Services;
 using TraderApps.Config;
 using TraderApps.Forms;
 using TraderApps.Helpers;
@@ -23,13 +24,14 @@ namespace TraderApps.UI.Forms
     {
         #region Variables
         public static Home Instance;
-        private readonly AuthService _authService; // New Service Instance
+        private readonly AuthService _authService; // Auth Service
+        private readonly ClientService _clientService; // Client Service
 
         // Dockable panels
         private DockContent MarketwatchDock;
         private DockContent DetailsDock;
 
-        private DetailsControl _detailsUC;
+        //private DetailsControl _detailsUC;
 
         private bool _isUserControlsPreloaded = false;
         private bool IsComeFromSocket = false;
@@ -38,10 +40,8 @@ namespace TraderApps.UI.Forms
         // Track panels
         private Dictionary<string, DockContent> allPanels = new Dictionary<string, DockContent>();
         private Dictionary<string, DockState> lastDockStates = new Dictionary<string, DockState>();
-        private static readonly HttpClient _http = new HttpClient();
 
         private DesignTimeHelper layoutHelper;
-        public static bool isViewLocked = false;
         #endregion
 
         #region Nested Classes
@@ -62,6 +62,7 @@ namespace TraderApps.UI.Forms
 
             // Initialize Service
             _authService = new AuthService();
+            _clientService = new ClientService();
 
             ThemeManager.ApplyTheme(this);
             dockPanel.Theme = new VS2015LightTheme();
@@ -124,9 +125,11 @@ namespace TraderApps.UI.Forms
                                 bool disclaimerAcknowledged = await ShowDisclaimerAndCheckAsync();
                                 if (disclaimerAcknowledged)
                                 {
-                                    var specificData = await GetSpecificClientListAsync();
+                                   
+                                    var specificData = await _clientService.GetSpecificClientListAsync();
                                     clientDetails = specificData.Clients;
-                                    var result1 = await GetClientListAsync();
+
+                                    var result1 = await _clientService.GetClientListAsync(clientDetails);
                                     var clients = result1.Clients;
                                     SessionManager.IsClientDataLoaded = true;
                                     SessionManager.SetClientList(clients);
@@ -190,9 +193,10 @@ namespace TraderApps.UI.Forms
                     bool disclaimerAcknowledged = await ShowDisclaimerAndCheckAsync();
                     if (disclaimerAcknowledged)
                     {
-                        var clientResposne = await GetSpecificClientListAsync();
+                        var clientResposne = await _clientService.GetSpecificClientListAsync();
                         clientDetails = clientResposne.Clients;
-                        var result1 = await GetClientListAsync();
+
+                        var result1 = await _clientService.GetClientListAsync(clientDetails);
                         var clients = result1.Clients;
                         // Save globally
                         SessionManager.IsClientDataLoaded = true;
@@ -238,7 +242,6 @@ namespace TraderApps.UI.Forms
             {
                 dockPanel.DockBottomPortion = this.Height * 0.30;
 
-                // --- CHANGE: Now we create Labels with Text ---
                 Label lblMarket = new Label();
                 lblMarket.Text = "Market Watch";
                 lblMarket.TextAlign = ContentAlignment.MiddleCenter;
@@ -246,11 +249,11 @@ namespace TraderApps.UI.Forms
                 lblMarket.Dock = DockStyle.Fill;
                 lblMarket.Font = new Font("Segoe UI", 14, FontStyle.Bold);
 
-                if(_detailsUC == null || _detailsUC.IsDisposed)
-                {
-                    _detailsUC = new DetailsControl();
-                }
-                UpdatePanelContent("Details", _detailsUC);
+                //if(_detailsUC == null || _detailsUC.IsDisposed)
+                //{
+                //    _detailsUC = new DetailsControl();
+                //}
+                //UpdatePanelContent("Details", _detailsUC);
 
                 // Update Panels
                 UpdatePanelContent("Market Watch", lblMarket);
@@ -319,7 +322,7 @@ namespace TraderApps.UI.Forms
         {
             if (_isUserControlsPreloaded) return;
 
-            _detailsUC = new DetailsControl();
+            //_detailsUC = new DetailsControl();
 
             _isUserControlsPreloaded = true;
         }
@@ -514,135 +517,6 @@ namespace TraderApps.UI.Forms
 
         #endregion
 
-        #region Client List Management
-        public static async Task<(bool Success, string ErrorMessage, List<ClientDetails> Clients)> GetClientListAsync()
-        {
-            string domain = SessionManager.ServerListData
-                .FirstOrDefault(w => w.licenseId.ToString() == SessionManager.LicenseId)?
-                .serverDisplayName;
-
-            string folder = Path.Combine(AppConfig.dataFolder, AESHelper.ToBase64UrlSafe(domain));
-            string fileName = $"{AESHelper.ToBase64UrlSafe(SessionManager.UserId)}.dat";
-            string filePath = Path.Combine(folder, fileName);
-
-            var encryptedFileData = new List<ClientDetails>();
-
-            if (File.Exists(filePath))
-            {
-                // Await the async method to get cached client data
-                encryptedFileData = await CommonHelper.LoadClientDataFromCacheAsync(filePath);
-            }
-
-            try
-            {
-                _http.AddAuthHeader();
-                var response = await _http.GetAsync(AppConfig.MasterClientListURL.ToReplaceUrl()).ConfigureAwait(false);
-                var json = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
-
-                if (!response.IsSuccessStatusCode)
-                {
-                    // If the response fails, return cached data if available
-                    return (true, $"Failed to get client details: {(int)response.StatusCode} {response.ReasonPhrase}\n{json}", encryptedFileData);
-                }
-
-                // Deserialize the API response using the updated model
-                var parsed = JsonConvert.DeserializeObject<ClientDetailsRootModel>(json);
-
-                if (encryptedFileData != null && encryptedFileData.Count != 0 && (parsed == null || parsed.data == null || parsed.data == null))
-                {
-                    // If the data from API is invalid, return the cached data
-                    return (true, "Invalid or empty client details response", encryptedFileData);
-                }
-                else if (encryptedFileData != null && encryptedFileData.Count == 0 && (parsed == null || parsed.data == null || parsed.data == null))
-                {
-                    // If no data is available, return null and error message
-                    return (true, "Invalid or empty client details response", null);
-                }
-
-                // Load existing data from file if it exists or initialize a new dictionary
-                var existingData = File.Exists(filePath)
-                    ? JsonConvert.DeserializeObject<Dictionary<string, object>>(AESHelper.DecompressAndDecryptString(File.ReadAllText(filePath)))
-                    : new Dictionary<string, object>();
-
-                var ClientObj = parsed.data;
-                if (clientDetails != null)
-                {
-                    ClientObj.CreditAmount = clientDetails.CreditAmount;
-                    ClientObj.UplineAmount = clientDetails.UplineAmount;
-                    ClientObj.Balance = clientDetails.Balance;
-                    ClientObj.OccupiedMarginAmount = clientDetails.OccupiedMarginAmount;
-                    ClientObj.UplineCommission = clientDetails.UplineCommission;
-                }
-
-                // Add or update the "client" data in the dictionary
-                existingData["client"] = ClientObj;
-                isViewLocked = ClientObj.IsViewLocked;
-
-                // Serialize and encrypt the updated data before saving it back to the file
-                string updatedJson = JsonConvert.SerializeObject(existingData);
-                string encryptedUpdatedJson = AESHelper.CompressAndEncryptString(updatedJson);
-                string decryptedUpdateJson = AESHelper.DecompressAndDecryptString(encryptedUpdatedJson);
-                string reencryptedUpdatedJson = AESHelper.CompressAndEncryptString(decryptedUpdateJson);
-
-                // Save the encrypted data back to the file
-                CommonHelper.SaveEncryptedData(folder, AESHelper.ToBase64UrlSafe(SessionManager.UserId), reencryptedUpdatedJson);
-
-                // Return the list of client details
-                return (true, null, new List<ClientDetails> { ClientObj });
-            }
-            catch (Exception ex)
-            {
-                // Return the error message and cached data if available
-                return (true, ex.Message, encryptedFileData);
-            }
-        }
-
-        public static async Task<(bool Success, string ErrorMessage, ClientDetails Clients)> GetSpecificClientListAsync()
-        {
-            string domain = SessionManager.ServerListData
-                .FirstOrDefault(w => w.licenseId.ToString() == SessionManager.LicenseId)?
-                .serverDisplayName;
-
-            try
-            {
-                _http.AddAuthHeader();
-
-                var stringURL = $"{AppConfig.ClientListURL.ToReplaceUrl()}/{SessionManager.UserId}";
-                var response = await _http.GetAsync(stringURL).ConfigureAwait(false);
-                var json = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
-
-                if (!response.IsSuccessStatusCode)
-                {
-                    // If the response fails, return cached data if available
-                    return (true, $"Failed to get client details: {(int)response.StatusCode} {response.ReasonPhrase}\n{json}", null);
-                }
-
-                // Deserialize the API response using the updated model
-                var parsed = JsonConvert.DeserializeObject<ClientDetailsRootModel>(json);
-
-                if (parsed == null || parsed.data == null || parsed.data == null)
-                {
-                    // If the data from API is invalid, return the cached data
-                    return (true, "Invalid or empty client details response", null);
-                }
-                else if (parsed == null || parsed.data == null || parsed.data == null)
-                {
-                    // If no data is available, return null and error message
-                    return (true, "Invalid or empty client details response", null);
-                }
-
-
-                // Return the list of client details
-                return (true, null, parsed.data);
-            }
-            catch (Exception ex)
-            {
-                // Return the error message and cached data if available
-                return (true, ex.Message, null);
-            }
-        }
-        #endregion
-
         #region Disconnect Handling
 
         private void SocketForceLogOut(string userId)
@@ -666,7 +540,7 @@ namespace TraderApps.UI.Forms
                 //_safeDispose(_marketWatchUC);
                 //_safeDispose(_navigationUC);
                 //_safeDispose(_chartUC);
-                _safeDispose(_detailsUC);
+                //_safeDispose(_detailsUC);
 
                 //_marketWatchUC = null;
                 //_navigationUC = null;

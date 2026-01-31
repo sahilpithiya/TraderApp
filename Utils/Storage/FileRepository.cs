@@ -1,5 +1,6 @@
 ﻿using Newtonsoft.Json;
 using System;
+using System.Collections.Generic;
 using System.IO;
 using TraderApp.Interfaces;
 using TraderApps.Config;
@@ -16,28 +17,51 @@ namespace TraderApps.Utils.Storage
             if (!Directory.Exists(_baseFolder)) Directory.CreateDirectory(_baseFolder);
         }
 
-        public void Save(string filename, T data)
+        public void Save(string filename, T data, string key = null)
         {
             try
             {
                 string path = Path.Combine(_baseFolder, filename + ".dat");
 
-                string directory = Path.GetDirectoryName(path);
-                if (!string.IsNullOrEmpty(directory) && !Directory.Exists(directory))
+                string dir = Path.GetDirectoryName(path);
+                if (!Directory.Exists(dir)) Directory.CreateDirectory(dir);
+
+                string contentToSave;
+
+                if (string.IsNullOrEmpty(key))
                 {
-                    Directory.CreateDirectory(directory);
+                    contentToSave = JsonConvert.SerializeObject(data);
+                }
+                else
+                {
+                    Dictionary<string, object> dataDictionary = new Dictionary<string, object>();
+
+                    if (File.Exists(path))
+                    {
+                        try
+                        {
+                            string existingEncrypted = File.ReadAllText(path);
+                            string existingJson = AESHelper.DecompressAndDecryptString(existingEncrypted);
+                            var existingDict = JsonConvert.DeserializeObject<Dictionary<string, object>>(existingJson);
+                            if (existingDict != null)
+                            {
+                                dataDictionary = existingDict;
+                            }
+                        }
+                        catch { /* Ignore errors, start fresh */ }
+                    }
+
+                    dataDictionary[key] = data;
+                    contentToSave = JsonConvert.SerializeObject(dataDictionary);
                 }
 
-                // Serialize & Encrypt
-                string json = JsonConvert.SerializeObject(data);
-                string encrypted = AESHelper.CompressAndEncryptString(json);
-
+                string encrypted = AESHelper.CompressAndEncryptString(contentToSave);
                 File.WriteAllText(path, encrypted);
             }
             catch (Exception ex) { Console.WriteLine("Save Error: " + ex.Message); }
         }
 
-        public T Load(string filename)
+        public T Load(string filename, string key = null)
         {
             try
             {
@@ -47,7 +71,21 @@ namespace TraderApps.Utils.Storage
                 string encrypted = File.ReadAllText(path);
                 string json = AESHelper.DecompressAndDecryptString(encrypted);
 
-                return JsonConvert.DeserializeObject<T>(json);
+                if (string.IsNullOrEmpty(key))
+                {
+                    return JsonConvert.DeserializeObject<T>(json);
+                }
+                else
+                {
+                    var dataDictionary = JsonConvert.DeserializeObject<Dictionary<string, object>>(json);
+                    if (dataDictionary != null && dataDictionary.ContainsKey(key))
+                    {
+                        var itemJson = dataDictionary[key].ToString();
+                        return JsonConvert.DeserializeObject<T>(itemJson);
+                    }
+                }
+
+                return default;
             }
             catch { return default; }
         }
