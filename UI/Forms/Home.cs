@@ -28,10 +28,6 @@ namespace TraderApps.UI.Forms
         private DockContent MarketwatchDock;
         private DockContent DetailsDock;
 
-        //private UCMarketWatchControl _marketWatchUC;
-        //private UCNavigationControl _navigationUC;
-        //private UCChartControl _chartUC;
-        //private UCDetailsControl _detailsUC;
         private bool _isUserControlsPreloaded = false;
         private bool IsComeFromSocket = false;
         private static ClientDetails clientDetails { get; set; }
@@ -65,7 +61,6 @@ namespace TraderApps.UI.Forms
             _authService = new AuthService();
 
             ThemeManager.ApplyTheme(this);
-            //SocketManager.OnForceLogout += SocketForceLogOut;
             dockPanel.Theme = new VS2015LightTheme();
             var whiteTheme = new DesignTimeHelper.DynamicColorTheme(ThemeManager.White);
             // Apply theme to dock panel
@@ -89,11 +84,8 @@ namespace TraderApps.UI.Forms
 
             this.toolStripSeparator6.Visible = false;
 
-            await LoadServerListAsync();
+            await _authService.GetServerListAsync();
 
-            // 3. Check for Saved Login (Refactored to use Service)
-            // string filePath = Path.Combine(AppConfig.dataFolder, $"{AESHelper.ToBase64UrlSafe("LoginData")}.dat");
-            // var loginInfoList = CommonHelper.LoadLoginDataFromCache(filePath);
             var loginInfoList = _authService.GetLoginHistory();
 
             if (loginInfoList == null || !loginInfoList.Any())
@@ -180,25 +172,6 @@ namespace TraderApps.UI.Forms
             }
         }
 
-        private async Task LoadServerListAsync()
-        {
-            // Refactored to use AuthService which handles File Check -> API fallback internally
-            await _authService.GetServerListAsync();
-
-            // Old Logic Removed (Handled by Service):
-            /*
-            string folder = AESHelper.ToBase64UrlSafe("Servers");
-            string file = AESHelper.ToBase64UrlSafe("ServerList");
-            string encryptedContent = null;
-
-            // Try to read local encrypted file (if exists)
-            string encryptedFilePath = Path.Combine(AppConfig.dataFolder, folder, $"{file}.dat");
-            if (!File.Exists(encryptedFilePath))
-            {
-                var result = await ServerService.GetServerListAsync();
-            }
-            */
-        }
 
         private async void ShowLoginForm()
         {
@@ -230,7 +203,6 @@ namespace TraderApps.UI.Forms
 
                     // Login successful - initialize the UI with user controls
                     InitializeAfterLogin(popup);
-                    //SocketManager.Start();
                 }
             }
         }
@@ -293,7 +265,6 @@ namespace TraderApps.UI.Forms
             this.Show();
         }
 
-        // Change 'UserControl' to 'Control' here
         private void UpdatePanelContent(string key, Control newContent)
         {
             DockContent panel;
@@ -342,100 +313,14 @@ namespace TraderApps.UI.Forms
         #endregion
 
         #region Dock Content Management
-        private IDockContent DeserializeDockContent(string persistString)
-        {
-            if (string.IsNullOrEmpty(persistString))
-                return null;
-
-            if (!allPanels.TryGetValue(persistString, out DockContent panel))
-            {
-                switch (persistString)
-                {
-                    //case "Market Watch":
-                    //    if (_marketWatchUC == null || _marketWatchUC.IsDisposed)
-                    //        _marketWatchUC = new UCMarketWatchControl();
-                    //    panel = CreateDockContentWithUserControl("Market Watch", _marketWatchUC);
-                    //    break;
-                    //case "Navigation":
-                    //    if (_navigationUC == null || _navigationUC.IsDisposed)
-                    //    {
-                    //        _navigationUC = new UCNavigationControl();
-                    //        _navigationUC.LoginSelected -= OnNavigationLoginSelected;
-                    //        _navigationUC.LoginSelected += OnNavigationLoginSelected;
-                    //    }
-                    //    panel = CreateDockContentWithUserControl("Navigation", _navigationUC);
-                    //    break;
-                    //case "Chart":
-                    //    if (_chartUC == null || _chartUC.IsDisposed)
-                    //        _chartUC = new UCChartControl();
-                    //    panel = CreateDockContentWithUserControl("Chart", _chartUC);
-                    //    break;
-                    //case "Details":
-                    //    if (_detailsUC == null || _detailsUC.IsDisposed)
-                    //        _detailsUC = new UCDetailsControl();
-                    //    panel = CreateDockContentWithUserControl("Details", _detailsUC);
-                    //    break;
-                    //default:
-                    //    return null;
-                }
-
-                allPanels[persistString] = panel;
-            }
-
-            return panel;
-        }
-
-        private DockContent CreateDockContentWithUserControl(string title, UserControl userControl)
-        {
-            var dockContent = new DesignTimeHelper.DynamicDockContent(title, userControl);
-            dockContent.FormClosing += Dock_FormClosing;
-            TrackPanel(dockContent);
-            return dockContent;
-        }
 
         private async Task PreloadUserControlsAsync()
         {
             if (_isUserControlsPreloaded) return;
 
-            //_marketWatchUC = new UCMarketWatchControl();
-            //_navigationUC = new UCNavigationControl();
-            //_navigationUC.LoginSelected -= OnNavigationLoginSelected;
-            //_navigationUC.LoginSelected += OnNavigationLoginSelected;
-            //_chartUC = new UCChartControl();
-            //_detailsUC = new UCDetailsControl();
+            
 
             _isUserControlsPreloaded = true;
-        }
-
-        //private void ShowDockPanelsWithUserControls()
-        //{
-        //    MarketwatchDock = new DesignTimeHelper.DynamicDockContent("Market Watch", _marketWatchUC);
-        //    allPanels["Market Watch"] = MarketwatchDock;
-        //    MarketwatchDock.Show(dockPanel, DockState.DockLeft);
-
-        //    NavigationDock = new DesignTimeHelper.DynamicDockContent("Navigation", _navigationUC);
-        //    allPanels["Navigation"] = NavigationDock;
-        //    NavigationDock.Show(MarketwatchDock.Pane, DockAlignment.Bottom, 0.5);
-
-        //    ChartDock = new DesignTimeHelper.DynamicDockContent("Chart", _chartUC);
-        //    allPanels["Chart"] = ChartDock;
-        //    ChartDock.Show(dockPanel, DockState.Document);
-
-        //    DetailsDock = new DesignTimeHelper.DynamicDockContent("Details", _detailsUC);
-        //    allPanels["Details"] = DetailsDock;
-        //    DetailsDock.Show(dockPanel, DockState.DockBottom);
-        //}
-
-        private void ShowEmptyDockLayout()
-        {
-            // Create empty dock contents with bordered panels
-            MarketwatchDock = CreateEmptyDockContentWithBorder("Market Watch");
-            allPanels["Market Watch"] = MarketwatchDock;
-            MarketwatchDock.Show(dockPanel, DockState.DockLeft);
-
-            DetailsDock = CreateEmptyDockContentWithBorder("Details");
-            allPanels["Details"] = DetailsDock;
-            DetailsDock.Show(dockPanel, DockState.DockBottom);
         }
 
         private DockContent CreateEmptyDockContentWithBorder(string title)
@@ -621,18 +506,9 @@ namespace TraderApps.UI.Forms
                 return created;
             }
 
-            //if (isLoggedIn)
-            //{
-            //    GetOrCreate("Market Watch", () => CreateDockContentWithUserControl("Market Watch", _marketWatchUC));
-            //    GetOrCreate("Navigation", () => CreateDockContentWithUserControl("Navigation", _navigationUC));
-            //    GetOrCreate("Chart", () => CreateDockContentWithUserControl("Chart", _chartUC));
-            //    GetOrCreate("Details", () => CreateDockContentWithUserControl("Details", _detailsUC));
-            //}
-            //else
-            //{
+            
             GetOrCreate("Market Watch", () => CreateEmptyDockContentWithBorder("Market Watch"));
             GetOrCreate("Details", () => CreateEmptyDockContentWithBorder("Details"));
-            //}
         }
 
         #endregion
@@ -786,15 +662,6 @@ namespace TraderApps.UI.Forms
 
             if (disconnectToolStripMenuItem.Text != "Connect" || IsComeFromSocket)
             {
-                //_safeDispose(_marketWatchUC);
-                //_safeDispose(_navigationUC);
-                //_safeDispose(_chartUC);
-                //_safeDispose(_detailsUC);
-
-                //_marketWatchUC = null;
-                //_navigationUC = null;
-                //_chartUC = null;
-                //_detailsUC = null;
 
                 _isUserControlsPreloaded = false;
 
