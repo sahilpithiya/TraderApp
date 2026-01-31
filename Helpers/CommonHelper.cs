@@ -41,6 +41,62 @@ public static class CommonHelper
         return Path.Combine(folder, fileName);
     }
 
+    public static List<Position> LoadPositionDataFromCache(string filePath)
+    {
+        try
+        {
+            if (File.Exists(filePath))
+            {
+                string encryptedContent = File.ReadAllText(filePath);
+                string decryptedContent = AESHelper.DecompressAndDecryptString(encryptedContent);
+
+                // Deserialize the cached dictionary
+                var dataDictionary = JsonConvert.DeserializeObject<Dictionary<string, object>>(decryptedContent);
+
+                if (dataDictionary != null && dataDictionary.ContainsKey("position"))
+                {
+                    // Deserialize and return the position list
+                    var positionJson = dataDictionary["position"].ToString();
+                    return JsonConvert.DeserializeObject<List<Position>>(positionJson);
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"⚠️ Failed to read local backup for position data.\nDetails: {ex.Message}", "Error");
+        }
+
+        return null;
+    }
+
+    public static List<OrderModel> LoadOrderDataFromCache(string filePath)
+    {
+        try
+        {
+            if (File.Exists(filePath))
+            {
+                string encryptedContent = File.ReadAllText(filePath);
+                string decryptedContent = AESHelper.DecompressAndDecryptString(encryptedContent);
+
+                // Deserialize the cached dictionary
+                var dataDictionary = JsonConvert.DeserializeObject<Dictionary<string, object>>(decryptedContent);
+
+                if (dataDictionary != null && dataDictionary.ContainsKey("order"))
+                {
+                    // Deserialize and return the order list
+                    var orderJson = dataDictionary["order"].ToString();
+                    return JsonConvert.DeserializeObject<List<OrderModel>>(orderJson);
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"⚠️ Failed to read local backup for order data.\nDetails: {ex.Message}", "Error");
+        }
+
+        return null;
+    }
+
     public static string GetLocalFolderPath()
     {
         // Default domain fallback
@@ -164,7 +220,7 @@ public static class CommonHelper
         // Tiny delay to ensure OS flush
         await Task.Delay(100);
     }
-    #endregion
+    #endregion  
 
     #region Data Saving And Encryption
     public static void SaveEncryptedData(string encryptedFolderName, string encryptedFileName, string encryptedContent)
@@ -188,37 +244,6 @@ public static class CommonHelper
     #endregion
 
     #region Cache Loading Methods
-    public static async Task<MarketWatchData> LoadCachedData(string filePath, Exception ex = null)
-    {
-        try
-        {
-            if (File.Exists(filePath))
-            {
-                string encryptedContent = File.ReadAllText(filePath);
-                string decryptedContent = AESHelper.DecompressAndDecryptString(encryptedContent);
-
-                // Deserialize the cached data
-                var dataDictionary = JsonConvert.DeserializeObject<Dictionary<string, object>>(decryptedContent);
-
-                // Get specific data by key (e.g., "symbol", "user", etc.)
-                if (dataDictionary != null && dataDictionary.ContainsKey("symbol"))
-                {
-                    return JsonConvert.DeserializeObject<MarketWatchData>(dataDictionary["symbol"].ToString());
-                }
-            }
-            else
-            {
-                throw ex ?? new Exception("No cached data available.");
-            }
-        }
-        catch (Exception innerEx)
-        {
-            Console.WriteLine($"⚠️ Failed to read local backup as well.\nDetails: {innerEx.Message}", "Error");
-            throw;
-        }
-
-        return null;
-    }
 
     public static async Task<List<ClientDetails>> LoadClientDataFromCacheAsync(string filePath, Exception ex = null)
     {
@@ -588,4 +613,18 @@ public static class CommonHelper
         return amount.ToString("#,0.00", nfi);
     }
     #endregion AmountFormatter
+}
+
+public static class GMTTime
+{
+    public static DateTime ConvertUtcToIst(DateTime utcTime)
+    {
+        DateTime utcDateTime = DateTime.SpecifyKind(utcTime, DateTimeKind.Utc);
+
+        DateTime istTime = TimeZoneInfo.ConvertTimeFromUtc(
+            utcDateTime,
+            TimeZoneInfo.FindSystemTimeZoneById("India Standard Time")
+        );
+        return istTime;
+    }
 }

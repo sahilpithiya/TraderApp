@@ -38,15 +38,10 @@ namespace TraderApps.UI.Theme
         public static Color Gray { get; private set; } = ColorTranslator.FromHtml("#c1c1c1");
         public static Color Yellow { get; private set; } = ColorTranslator.FromHtml("#f2c810");
         public static Color SkyBlue { get; private set; } = ColorTranslator.FromHtml("#38acff"); //Color.FromArgb(163, 189, 217);
-        public static Color DockPanelSelectedHeaderBackColor { get; private set; } = Color.FromArgb(153, 180, 209);
-        public static Color DockPanelHeaderBackColor { get; private set; } = Color.FromArgb(240, 248, 255);
         public static Color GridRowBackColor { get; private set; } = Color.FromArgb(235, 235, 235);
         public static Color Reportback { get; private set; } = White; //ColorTranslator.FromHtml("#5f7991"); // Previous Use color 
         public static Color SelectionBackColor { get; private set; } = ColorTranslator.FromHtml("#007acc");
-        public static Color InvoiceBackColor { get; private set; } = ColorTranslator.FromHtml("#EFECC8");
 
-        // Notify event when theme changes
-        public static event Action ThemeChanged;
         #endregion
 
         #region Theme Application For Controls

@@ -9,6 +9,7 @@ using System.Linq;
 using System.Net.Http;
 using System.Threading.Tasks;
 using System.Windows.Forms;
+using TraderApp.UI.Usercontrol;
 using TraderApps.Config;
 using TraderApps.Forms;
 using TraderApps.Helpers;
@@ -27,6 +28,8 @@ namespace TraderApps.UI.Forms
         // Dockable panels
         private DockContent MarketwatchDock;
         private DockContent DetailsDock;
+
+        private DetailsControl _detailsUC;
 
         private bool _isUserControlsPreloaded = false;
         private bool IsComeFromSocket = false;
@@ -172,6 +175,11 @@ namespace TraderApps.UI.Forms
             }
         }
 
+        private async Task LoadServerListAsync()
+        {
+            string folder = AESHelper.ToBase64UrlSafe("Servers");
+            string file = AESHelper.ToBase64UrlSafe("ServerList");
+            string encryptedContent = null;
 
         private async void ShowLoginForm()
         {
@@ -243,16 +251,14 @@ namespace TraderApps.UI.Forms
                 lblMarket.Dock = DockStyle.Fill;
                 lblMarket.Font = new Font("Segoe UI", 14, FontStyle.Bold);
 
-                Label lblDetails = new Label();
-                lblDetails.Text = "Details";
-                lblDetails.TextAlign = ContentAlignment.MiddleCenter;
-                lblDetails.BackColor = Color.MistyRose;
-                lblDetails.Dock = DockStyle.Fill;
-                lblDetails.Font = new Font("Segoe UI", 14, FontStyle.Bold);
+                if(_detailsUC == null || _detailsUC.IsDisposed)
+                {
+                    _detailsUC = new DetailsControl();
+                }
+                UpdatePanelContent("Details", _detailsUC);
 
                 // Update Panels
                 UpdatePanelContent("Market Watch", lblMarket);
-                UpdatePanelContent("Details", lblDetails);
 
                 EnsurePanelsVisible();
             }
@@ -289,11 +295,11 @@ namespace TraderApps.UI.Forms
             // --- CRITICAL CHANGE FOR LAYOUT ---
             if (key == "Market Watch")
             {
-                panel.Show(dockPanel, DockState.Document); // Fills top area
+                panel.Show(dockPanel, DockState.Document);
             }
             else if (key == "Details")
             {
-                panel.Show(dockPanel, DockState.DockBottom); // Fills bottom 30%
+                panel.Show(dockPanel, DockState.DockBottom); 
             }
         }
 
@@ -318,7 +324,7 @@ namespace TraderApps.UI.Forms
         {
             if (_isUserControlsPreloaded) return;
 
-            
+            _detailsUC = new DetailsControl();
 
             _isUserControlsPreloaded = true;
         }
@@ -662,6 +668,15 @@ namespace TraderApps.UI.Forms
 
             if (disconnectToolStripMenuItem.Text != "Connect" || IsComeFromSocket)
             {
+                //_safeDispose(_marketWatchUC);
+                //_safeDispose(_navigationUC);
+                //_safeDispose(_chartUC);
+                _safeDispose(_detailsUC);
+
+                //_marketWatchUC = null;
+                //_navigationUC = null;
+                //_chartUC = null;
+                //_detailsUC = null;
 
                 _isUserControlsPreloaded = false;
 

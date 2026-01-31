@@ -198,6 +198,9 @@
     <EmbeddedResource Include="UI\Forms\LoginPage.resx">
       <DependentUpon>LoginPage.cs</DependentUpon>
     </EmbeddedResource>
+    <EmbeddedResource Include="UI\Usercontrol\DetailsControl.resx">
+      <DependentUpon>DetailsControl.cs</DependentUpon>
+    </EmbeddedResource>
     <None Include="app.manifest" />
     <None Include="packages.config" />
     <None Include="Properties\Settings.settings">
