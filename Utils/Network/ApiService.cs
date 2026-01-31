@@ -1,10 +1,12 @@
-﻿using System;
+﻿using Newtonsoft.Json;
+using System;
 using System.Collections.Generic;
 using System.Net.Http;
+using System.Net.Http.Headers;
 using System.Text;
 using System.Threading.Tasks;
-using Newtonsoft.Json;
 using TraderApp.Interfaces;
+using TraderApps.Helpers;
 
 namespace TraderApp.Utils.Network
 {
@@ -23,7 +25,9 @@ namespace TraderApp.Utils.Network
         {
             try
             {
+                _http.AddAuthHeader();
                 var response = await _http.GetAsync(url);
+
                 if (!response.IsSuccessStatusCode) return default;
 
                 var json = await response.Content.ReadAsStringAsync();
@@ -36,6 +40,7 @@ namespace TraderApp.Utils.Network
         {
             try
             {
+                _http.AddAuthHeader();
                 var json = JsonConvert.SerializeObject(data);
                 var content = new StringContent(json, Encoding.UTF8, "application/json");
 
@@ -56,6 +61,7 @@ namespace TraderApp.Utils.Network
         {
             try
             {
+                _http.AddAuthHeader();
                 var content = new FormUrlEncodedContent(data);
                 var response = await _http.PostAsync(url, content);
                 var json = await response.Content.ReadAsStringAsync();

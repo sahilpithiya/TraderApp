@@ -56,7 +56,11 @@ namespace TraderApps.Config
         public static readonly string GetInvoice = @"C:\Client Desktop\Json Response\dealer-invoice-2025-09-15--2025-09-20-PreviousWeek.txt";
         public static readonly string GetLedger = @"C:\Client Desktop\Json Response\dealer-ledger-historyforclient.txt";
         public static readonly string ServerListFile = @"C:\Client Desktop\Json Response\serverlist.txt";
-        public static readonly string dataFolder = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "ClientDesktop");
+        public static readonly string dataFolder = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+            "TraderApp",
+            "Data"
+        );
         #endregion
 
 
