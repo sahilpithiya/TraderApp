@@ -254,6 +254,9 @@ namespace TraderApps.UI.Forms
                 {
                     _detailsUC = new DetailsControl();
                 }
+
+                _detailsUC.LoadData();
+
                 UpdatePanelContent("Details", _detailsUC);
 
 
