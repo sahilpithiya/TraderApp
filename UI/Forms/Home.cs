@@ -238,7 +238,6 @@ namespace TraderApps.UI.Forms
             {
                 dockPanel.DockBottomPortion = this.Height * 0.30;
 
-                // --- CHANGE: Now we create Labels with Text ---
                 Label lblMarket = new Label();
                 lblMarket.Text = "Market Watch";
                 lblMarket.TextAlign = ContentAlignment.MiddleCenter;
@@ -246,13 +245,15 @@ namespace TraderApps.UI.Forms
                 lblMarket.Dock = DockStyle.Fill;
                 lblMarket.Font = new Font("Segoe UI", 14, FontStyle.Bold);
 
-                if(_detailsUC == null || _detailsUC.IsDisposed)
+                if (_detailsUC == null || _detailsUC.IsDisposed)
                 {
                     _detailsUC = new DetailsControl();
                 }
-                UpdatePanelContent("Details", _detailsUC);
 
-                // Update Panels
+                // ✅ FIX: Explicitly call LoadData here (it won't run in constructor anymore)
+                _detailsUC.LoadData();
+
+                UpdatePanelContent("Details", _detailsUC);
                 UpdatePanelContent("Market Watch", lblMarket);
 
                 EnsurePanelsVisible();
