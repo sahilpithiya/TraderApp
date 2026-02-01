@@ -12,6 +12,7 @@ using System.Net.Http;
 using System.Text;
 using System.Threading.Tasks;
 using System.Windows.Forms;
+using TraderApp.Helpers;
 using TraderApp.Properties;
 using TraderApp.Services;
 using TraderApp.Utils.Network;
@@ -79,40 +80,65 @@ namespace TraderApp.UI.Usercontrol
                 _ = UpdateVisibleSymbolsAsync();
             };
 
-            LoadInitData();
+            //LoadInitData();
             SetPlaceholder(txtsearchsymbol, "Search Symbol");
         }
+        #endregion
+
+        #region Public Methods for Home.cs
+
+        public async Task LoadDataAsync(bool forceApiSync = false)
+        {
+            try
+            {
+                var marketWatchData = await _marketWatchService.GetMarketWatchDataAsync(forceApiSync);
+
+                if (marketWatchData?.symbols == null || marketWatchData.symbols.Count == 0)
+                {
+                    FileLogger.Log("MarketWatch", "No data found (Local or API).");
+                    return;
+                }
+
+                if (this.InvokeRequired)
+                {
+                    this.Invoke(new Action(() => UpdateGridData(marketWatchData)));
+                }
+                else
+                {
+                    UpdateGridData(marketWatchData);
+                }
+
+                if (System.Net.NetworkInformation.NetworkInterface.GetIsNetworkAvailable())
+                {
+                    await InitSignalRAsync();
+                }
+            }
+            catch (Exception ex)
+            {
+                FileLogger.Log("MarketWatch", $"LoadData Error: {ex.Message}");
+            }
+        }
+
+        private void UpdateGridData(MarketWatchData marketWatchData)
+        {
+            removedRows.Clear();
+            SessionManager.SymbolNameList = marketWatchData.symbols.ToList();
+
+            var visibleSymbols = ProcessApiSymbols(marketWatchData.symbols);
+
+            _bindingList = new BindingList<MarketWatchSymbols>(visibleSymbols);
+            dgvMarketWatchGrid.DataSource = _bindingList;
+
+            SetupGrid(marketWatchData);
+        }
+
         #endregion
 
         #region Load Init Data
 
         private async void LoadInitData()
         {
-            try
-            {
-                var marketWatchData = await _marketWatchService.GetMarketWatchDataAsync();
-
-                if (marketWatchData?.symbols == null || marketWatchData.symbols.Count == 0)
-                    return;
-
-                removedRows.Clear();
-
-                SessionManager.SymbolNameList = marketWatchData.symbols.ToList();
-
-                // Process API symbols
-                var visibleSymbols = ProcessApiSymbols(marketWatchData.symbols);
-
-                _bindingList = new BindingList<MarketWatchSymbols>(visibleSymbols);
-                dgvMarketWatchGrid.DataSource = _bindingList;
-
-                SetupGrid(marketWatchData);
-
-                await InitSignalRAsync();
-            }
-            catch (Exception ex)
-            {
-                Console.Write("Error loading market watch data: " + ex.Message);
-            }
+            await LoadDataAsync(false);
         }
 
         private List<MarketWatchSymbols> ProcessApiSymbols(List<MarketWatchApiSymbol> apiSymbols)
@@ -608,7 +634,7 @@ namespace TraderApp.UI.Usercontrol
 
                 if (visibleSymbols.Count == 0)
                 {
-                    //MessagePopup.ShowPopup(CommonMessages.NoSymbolHide);
+                    FileLogger.Log("MarketWatch", CommonMessages.NoSymbolHide);
                     return;
                 }
 
@@ -653,7 +679,7 @@ namespace TraderApp.UI.Usercontrol
             // Show success message
             if (!string.IsNullOrEmpty(hideSymbol.successMessage))
             {
-                //MessagePopup.ShowPopup($"{hideSymbol.successMessage}", hideSymbol?.data?.symbolId != null ? true : false);
+                FileLogger.Log("MarketWatch", $"{hideSymbol.successMessage}");
             }
         }
 
@@ -664,7 +690,7 @@ namespace TraderApp.UI.Usercontrol
             {
                 if (removedRows.Count == 0)
                 {
-                    //MessagePopup.ShowPopup(CommonMessages.NoHiddenSymbolShow);
+                    FileLogger.Log("MarketWatch", CommonMessages.NoHiddenSymbolShow);
                     return;
                 }
 
@@ -692,7 +718,7 @@ namespace TraderApp.UI.Usercontrol
 
                 await Task.Delay(100);
                 await UpdateVisibleSymbolsAsync();
-                //MessagePopup.ShowPopup($"{restoredCount} {CommonMessages.HiddenSymbolRestored}", true);
+                FileLogger.Log("MarketWatch", $"{restoredCount} {CommonMessages.HiddenSymbolRestored}");
             }
             catch (Exception ex)
             {
@@ -1029,7 +1055,7 @@ namespace TraderApp.UI.Usercontrol
                 btnSaveSymbol.Enabled = false;
                 if (_bindingList == null || _bindingList.Count <= 1)
                 {
-                    //MessagePopup.ShowPopup(CommonMessages.NoSymbolSave);
+                    FileLogger.Log("MarketWatch", CommonMessages.NoSymbolSave);
                     return;
                 }
 
@@ -1096,11 +1122,11 @@ namespace TraderApp.UI.Usercontrol
 
                 if (apiResp?.isSuccess == true)
                 {
-                    //MessagePopup.ShowPopup(apiResp.successMessage ?? CommonMessages.ProfileSaved, true);
+                    FileLogger.Log("MarketWatch", apiResp.successMessage ?? CommonMessages.ProfileSaved);
                 }
                 else
                 {
-                    //MessagePopup.ShowPopup(CommonMessages.ProfileFailedToSaved);
+                    FileLogger.Log("MarketWatch", CommonMessages.ProfileFailedToSaved);
                 }
             }
             catch (Exception ex)

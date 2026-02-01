@@ -76,79 +76,114 @@ namespace TraderApps.UI.Forms
         #region Authentication And Login Handling
         public async void InitializeHome()
         {
-
             this.toolStripSeparator6.Visible = false;
 
             await _authService.GetServerListAsync();
 
             var loginInfoList = _authService.GetLoginHistory();
+            var existingUser = loginInfoList?.FirstOrDefault(user => user.LastLogin == true);
+
+            if (existingUser != null)
+            {
+                SessionManager.SetServerList(existingUser.ServerListData);
+                SessionManager.SetSession(null, existingUser.UserId, existingUser.Username, existingUser.LicenseId, null, existingUser.Password);
+            }
+
+            ShowPreLoginLayout();
+
+            await _authService.GetServerListAsync();
+
+            if (!System.Net.NetworkInformation.NetworkInterface.GetIsNetworkAvailable())
+            {
+                FileLogger.Log("Network", "No Internet Connection detected at startup.");
+                ShowLoginForm();
+                return;
+            }
 
             if (loginInfoList == null || !loginInfoList.Any())
             {
-                ShowLoginForm();
+                ShowLoginForm(); // First time install case
             }
             else
             {
-                var existingUser = loginInfoList.FirstOrDefault(user => user.LastLogin == true);
                 if (existingUser != null)
                 {
-                    SessionManager.SetServerList(existingUser.ServerListData);
-                    SessionManager.SetSession(null, existingUser.UserId, existingUser.Username, existingUser.LicenseId, null, existingUser.Password);
-                    ShowPreLoginLayout();
-
-                    if (string.IsNullOrEmpty(existingUser.Password))
+                    // Case 2: Remember Me (Auto Login)
+                    if (!string.IsNullOrEmpty(existingUser.Password))
                     {
-                        ShowLoginForm();
-                        return;
+                        LoginPage loginPage = new LoginPage();
+                        bool loginSuccessful = await loginPage.LoginAsync(existingUser.UserId, existingUser.Password, existingUser.LicenseId, existingUser.LastLogin);
+
+                        if (loginSuccessful)
+                        {
+                            // Login validate ho gaya -> Finalize setup
+                            using (var popup = loginPage)
+                            {
+                                await PerformPostLoginSetup(popup);
+                            }
+                        }
+                        else
+                        {
+                            ShowLoginForm();
+                        }
                     }
                     else
                     {
-                        // Silent Login
-                        LoginPage loginPage = new LoginPage();
-                        bool loginAttempt = await loginPage.LoginAsync(existingUser.UserId, existingUser.Password, existingUser.LicenseId, existingUser.LastLogin);
-
-                        // ✅ NOTE: Even if password fails, we might return True (Restricted Mode)
-                        // LoginLogic in LoginAsync handles the "Allow entry but log error" part.
-
-                        using (var popup = loginPage)
-                        {
-                            await PreloadUserControlsAsync();
-
-                            bool disclaimerAcknowledged = await ShowDisclaimerAndCheckAsync();
-                            if (disclaimerAcknowledged)
-                            {
-                                try
-                                {
-                                    // Only try to load client data if we have a valid token (Full Login)
-                                    if (!string.IsNullOrEmpty(SessionManager.Token))
-                                    {
-                                        var specificData = await _clientService.GetSpecificClientListAsync();
-                                        clientDetails = specificData.Clients;
-
-                                        var result1 = await _clientService.GetClientListAsync(clientDetails);
-                                        var clients = result1.Clients;
-                                        SessionManager.IsClientDataLoaded = true;
-                                        SessionManager.SetClientList(clients);
-                                    }
-                                }
-                                catch (Exception ex)
-                                {
-                                    FileLogger.Log("Initialization", "Client Data Load Error: " + ex.Message);
-                                }
-                            }
-                            else
-                            {
-                                ShowLoginForm();
-                                return;
-                            }
-
-                            InitializeAfterLogin(popup);
-                        }
+                        // Case 1: Not Remembered -> Show Login Form (MarketWatch already visible in bg)
+                        ShowLoginForm();
                     }
                 }
                 else
                 {
                     ShowLoginForm();
+                }
+            }
+        }
+
+        private async Task PerformPostLoginSetup(LoginPage popup = null)
+        {
+            await PreloadUserControlsAsync();
+
+            bool disclaimerAcknowledged = await ShowDisclaimerAndCheckAsync();
+            if (disclaimerAcknowledged)
+            {
+                if (!string.IsNullOrEmpty(SessionManager.Token))
+                {
+                    try
+                    {
+                        var specificData = await _clientService.GetSpecificClientListAsync();
+                        clientDetails = specificData.Clients;
+                        var result1 = await _clientService.GetClientListAsync(clientDetails);
+                        SessionManager.IsClientDataLoaded = true;
+                        SessionManager.SetClientList(result1.Clients);
+                    }
+                    catch (Exception ex)
+                    {
+                        FileLogger.Log("Home", "Client Data Load Error: " + ex.Message);
+                    }
+                }
+            }
+            else
+            {
+                ShowLoginForm();
+                return;
+            }
+
+            // 6. UI Update: Login Validate ho gaya, ab API se naya data leke silently update karo
+            InitializeAfterLogin(popup);
+        }
+
+        private async void ShowLoginForm()
+        {
+            using (var popup = new LoginPage())
+            {
+                ThemeManager.AdjustLoginSize(popup, this);
+                var result = popup.ShowDialog(this); // Modal Dialog
+
+                if (result == DialogResult.OK)
+                {
+                    // User ne credentials dale aur LoginAsync success hua
+                    await PerformPostLoginSetup(popup);
                 }
             }
         }
@@ -160,107 +195,50 @@ namespace TraderApps.UI.Forms
                 return disclaimerForm.ShowDialog() == DialogResult.OK;
             }
         }
-
-        private async void ShowLoginForm()
-        {
-            using (var popup = new LoginPage())
-            {
-                ThemeManager.AdjustLoginSize(popup, this);
-                var result = popup.ShowDialog(this);
-
-                if (result == DialogResult.OK)
-                {
-                    await PreloadUserControlsAsync();
-
-                    bool disclaimerAcknowledged = await ShowDisclaimerAndCheckAsync();
-                    if (disclaimerAcknowledged)
-                    {
-                        // Only fetch data if Actual Login Success (Token exists)
-                        if (!string.IsNullOrEmpty(SessionManager.Token))
-                        {
-                            try
-                            {
-                                var clientResposne = await _clientService.GetSpecificClientListAsync();
-                                clientDetails = clientResposne.Clients;
-
-                                var result1 = await _clientService.GetClientListAsync(clientDetails);
-                                var clients = result1.Clients;
-                                SessionManager.IsClientDataLoaded = true;
-                                SessionManager.SetClientList(clients);
-                            }
-                            catch (Exception ex)
-                            {
-                                FileLogger.Log("ClientService", "Failed to load clients: " + ex.Message);
-                            }
-                        }
-                    }
-                    else
-                    {
-                        ShowLoginForm();
-                        return;
-                    }
-
-                    InitializeAfterLogin(popup);
-                }
-            }
-        }
         #endregion
 
         #region Post Login Initialization
         private async void InitializeAfterLogin(LoginPage popup)
         {
+            // UI Header updates
             toolStripDropDownUserButton.Text = SessionManager.UserId;
-            toolStripDropDownUserButton.Font = new Font(toolStripDropDownUserButton.Font, FontStyle.Bold);
-            toolStripDropDownUserButton.DropDown.Font = new Font(toolStripDropDownUserButton.Font, FontStyle.Regular);
             disconnectToolStripMenuItem.Text = "Disconnect";
             disconnectToolStripMenuItem.Image = TraderApp.Properties.Resources.disconnectednew;
-            string title = (SessionManager.ServerListData != null
-                && SessionManager.ServerListData.Any())
-                ? (SessionManager.ServerListData
-                    .FirstOrDefault(q => q?.licenseId.ToString() == SessionManager.LicenseId)?
-                    .serverDisplayName ?? "Home")
-                : "Home";
+
+            string title = (SessionManager.ServerListData?
+                .FirstOrDefault(q => q?.licenseId.ToString() == SessionManager.LicenseId)?
+                .serverDisplayName ?? "Home");
             this.Text = title;
 
             if (!SessionManager.IsPasswordReadOnly)
-            {
                 this.toolStripSeparator6.Visible = true;
-            }
 
             this.SuspendLayout();
             dockPanel.SuspendLayout(true);
             try
             {
-                dockPanel.DockBottomPortion = this.Height * 0.30;
+                // Ensure controls exist
+                if (_detailsUC == null || _detailsUC.IsDisposed) _detailsUC = new DetailsControl();
+                if (_marketWatchControl == null || _marketWatchControl.IsDisposed) _marketWatchControl = new MarketWatchControl();
 
-                if (_detailsUC == null || _detailsUC.IsDisposed)
-                {
-                    _detailsUC = new DetailsControl();
-                }
-
-                // ✅ CRITICAL LOGIC: Check if this is a "Full Login" or "Restricted Entry"
+                // Token check for Full Access
                 if (!string.IsNullOrEmpty(SessionManager.Token))
                 {
-                    // Success: Enable History & Load Data
                     _detailsUC.EnableFullAccess();
                     _detailsUC.LoadData();
                     FileLogger.Log("System", "Login Successful. Full Access Enabled.");
+
+                    // ✅ CRITICAL: Sync Market Watch with API (Silent Update)
+                    // Abhi tak local data dikh raha tha, ab API se fresh data aayega
+                    await _marketWatchControl.LoadDataAsync(true); // forceApiSync = true
                 }
                 else
                 {
-                    // Restricted: Keep History Hidden, Show only Journal
                     _detailsUC.SetupPreLoginMode();
-                    FileLogger.Log("System", "Restricted Mode: History disabled due to login failure.");
+                    FileLogger.Log("System", "Restricted Mode.");
                 }
 
                 UpdatePanelContent("Details", _detailsUC);
-
-                if (_marketWatchControl == null || _marketWatchControl.IsDisposed)
-                {
-                    _marketWatchControl = new MarketWatchControl();
-                }
-
-                // Update Panels
                 UpdatePanelContent("Market Watch", _marketWatchControl);
 
                 EnsurePanelsVisible();
@@ -272,6 +250,35 @@ namespace TraderApps.UI.Forms
             }
 
             this.Show();
+        }
+
+        private void ShowPreLoginLayout()
+        {
+            this.SuspendLayout();
+            dockPanel.SuspendLayout(true);
+            try
+            {
+                dockPanel.DockBottomPortion = this.Height * 0.30;
+
+                if (_detailsUC == null || _detailsUC.IsDisposed) _detailsUC = new DetailsControl();
+                if (_marketWatchControl == null || _marketWatchControl.IsDisposed) _marketWatchControl = new MarketWatchControl();
+
+                // Pre-Login Mode (Hide history)
+                _detailsUC.SetupPreLoginMode();
+
+                // ✅ Initial Load: Only Local Data (No API call yet)
+                // MarketWatchControl constructor does NOT auto-load anymore to give us control.
+                // Call LoadDataAsync(false) -> Loads from FileRepository ("symbol" key)
+                _ = _marketWatchControl.LoadDataAsync(false);
+
+                UpdatePanelContent("Market Watch", _marketWatchControl);
+                UpdatePanelContent("Details", _detailsUC);
+            }
+            finally
+            {
+                dockPanel.ResumeLayout(true, true);
+                this.ResumeLayout(true);
+            }
         }
 
         private void UpdatePanelContent(string key, Control newContent)
@@ -315,7 +322,6 @@ namespace TraderApps.UI.Forms
                 }
             }
         }
-
         #endregion
 
         #region Dock Content Management
@@ -352,42 +358,6 @@ namespace TraderApps.UI.Forms
             return dockContent;
         }
 
-        // ✅ REPLACED: ShowEmptyColoredLayout -> ShowPreLoginLayout
-        private void ShowPreLoginLayout()
-        {
-            this.SuspendLayout();
-            dockPanel.SuspendLayout(true);
-            try
-            {
-                dockPanel.DockBottomPortion = this.Height * 0.30;
-
-                // Market Watch Placeholder
-                Panel emptyBluePanel = new Panel { BackColor = Color.AliceBlue, Dock = DockStyle.Fill };
-
-                // ✅ Initialize Real Details Control
-                if (_detailsUC == null || _detailsUC.IsDisposed)
-                {
-                    _detailsUC = new DetailsControl();
-                }
-
-                if (_marketWatchControl == null || _marketWatchControl.IsDisposed)
-                {
-                    _marketWatchControl = new MarketWatchControl();
-                }
-
-                // ✅ Hide History, Show Journal (Pre-Login Mode)
-                _detailsUC.SetupPreLoginMode();
-
-                UpdatePanelContent("Market Watch", _marketWatchControl);
-                UpdatePanelContent("Details", _detailsUC);
-            }
-            finally
-            {
-                dockPanel.ResumeLayout(true, true);
-                this.ResumeLayout(true);
-            }
-        }
-
         #endregion
 
         #region Panel Tracking And Dropdown
@@ -405,19 +375,7 @@ namespace TraderApps.UI.Forms
 
         private void Dock_FormClosing(object sender, FormClosingEventArgs e)
         {
-            if (e.CloseReason == CloseReason.UserClosing)
-            {
-                e.Cancel = true;
-                var panel = sender as DockContent;
-                if (panel != null)
-                {
-                    panel.Hide();
-                    foreach (ToolStripMenuItem item in panelsDropdown.DropDownItems)
-                    {
-                        if (item.Text == panel.Text) item.Checked = false;
-                    }
-                }
-            }
+            if (e.CloseReason == CloseReason.UserClosing) { e.Cancel = true; (sender as DockContent)?.Hide(); }
         }
 
         private void InitializePanelsDropdown()
@@ -521,14 +479,7 @@ namespace TraderApps.UI.Forms
 
         #endregion
 
-        #region Disconnect Handling
-
-        private void SocketForceLogOut(string userId)
-        {
-            IsComeFromSocket = true;
-            disconnectToolStripMenuItem_Click(this, EventArgs.Empty);
-        }
-
+        #region Disconnect
         public void disconnectToolStripMenuItem_Click(object sender, EventArgs e)
         {
             if (this.InvokeRequired)
@@ -540,103 +491,13 @@ namespace TraderApps.UI.Forms
             if (disconnectToolStripMenuItem.Text != "Connect" || IsComeFromSocket)
             {
                 _isUserControlsPreloaded = false;
-
-                this.SuspendLayout();
-                dockPanel.SuspendLayout(true);
-
-                foreach (var kv in allPanels)
-                {
-                    var panel = kv.Value;
-                    if (panel != null && !panel.IsDisposed)
-                    {
-                        panel.Controls.Clear();
-                        var emptyControl = CreateEmptyBorderedControl();
-                        panel.Controls.Add(emptyControl);
-                    }
-                }
-
-                dockPanel.ResumeLayout(true, true);
-                this.ResumeLayout(true);
-                IsComeFromSocket = false;
-                this.Text = string.Empty;
-                toolStripDropDownUserButton.Text = "";
-                disconnectToolStripMenuItem.Text = "Connect";
-                disconnectToolStripMenuItem.Image = TraderApp.Properties.Resources.connected;
-                this.changePasswordToolStripMenuItem.Visible = false;
-                this.trade.Visible = false;
-                this.panelsDropdown.Visible = false;
-                this.toolStripSeparator6.Visible = false;
-
                 SessionManager.ClearSession();
+                FileLogger.Log("System", "User Disconnected.");
 
-                // Switch back to Pre-Login Layout (Journal Only)
                 ShowPreLoginLayout();
             }
             ShowLoginForm();
         }
-
-        private Control CreateEmptyBorderedControl()
-        {
-            var borderedPanel = new Panel
-            {
-                BorderStyle = BorderStyle.FixedSingle,
-                Dock = DockStyle.Fill
-            };
-            var label = new Label
-            {
-                Text = string.Empty,
-                TextAlign = ContentAlignment.MiddleCenter,
-                Dock = DockStyle.Fill,
-                ForeColor = ThemeManager.Black
-            };
-            borderedPanel.Controls.Add(label);
-            return borderedPanel;
-        }
-
-        private void OnNavigationLoginSelected(LoginInfo login)
-        {
-            if (this.IsDisposed) return;
-
-            BeginInvoke(new Action(() =>
-            {
-                if (!this.IsDisposed)
-                {
-                    disconnectToolStripMenuItem_Click(this, EventArgs.Empty);
-                }
-            }));
-        }
-
-        private void CloseNonPanelForms()
-        {
-            var openForms = Application.OpenForms.Cast<Form>().ToList();
-            foreach (Form form in openForms)
-            {
-                if (form != this)
-                {
-                    try
-                    {
-                        form.Hide();
-                        form.Dispose();
-                    }
-                    catch (Exception ex)
-                    {
-                        Console.WriteLine($"Error closing form: {ex.Message}");
-                    }
-                }
-            }
-        }
-
-        private void _safeDispose(Control c)
-        {
-            if (c != null && !c.IsDisposed)
-                c.Dispose();
-        }
-
-        private void Home_FormClosing(object sender, FormClosingEventArgs e)
-        {
-            //_networkMonitor?.Stop();
-        }
-
         #endregion
 
         #region UI Event Handlers

@@ -216,6 +216,7 @@
   <ItemGroup>
     <Compile Include="Config\AppConfig.cs" />
     <Compile Include="Helpers\CommonHelper.cs" />
+    <Compile Include="Helpers\CommonMessages.cs" />
     <Compile Include="Interfaces\IApiService.cs" />
     <Compile Include="Interfaces\IRepository.cs" />
     <Compile Include="Services\ClientService.cs" />
