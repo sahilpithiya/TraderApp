@@ -32,6 +32,7 @@ namespace TraderApps.UI.Forms
         private DockContent DetailsDock;
 
         private DetailsControl _detailsUC;
+        private MarketWatchControl _marketWatchControl;
 
         private bool _isUserControlsPreloaded = false;
         private bool IsComeFromSocket = false;
@@ -43,16 +44,6 @@ namespace TraderApps.UI.Forms
 
         private DesignTimeHelper layoutHelper;
 
-        #endregion
-
-        #region Nested Classes
-        public class MessageItem
-        {
-            public string Form { get; set; }
-            public string Title { get; set; }
-            public string Message { get; set; }
-            public DateTime DateTime { get; set; }
-        }
         #endregion
 
         #region Form Initialization
@@ -243,13 +234,6 @@ namespace TraderApps.UI.Forms
             {
                 dockPanel.DockBottomPortion = this.Height * 0.30;
 
-                Label lblMarket = new Label();
-                lblMarket.Text = "Market Watch";
-                lblMarket.TextAlign = ContentAlignment.MiddleCenter;
-                lblMarket.BackColor = Color.AliceBlue;
-                lblMarket.Dock = DockStyle.Fill;
-                lblMarket.Font = new Font("Segoe UI", 14, FontStyle.Bold);
-
                 if (_detailsUC == null || _detailsUC.IsDisposed)
                 {
                     _detailsUC = new DetailsControl();
@@ -271,7 +255,14 @@ namespace TraderApps.UI.Forms
                 }
 
                 UpdatePanelContent("Details", _detailsUC);
-                UpdatePanelContent("Market Watch", lblMarket);
+
+                if (_marketWatchControl == null || _marketWatchControl.IsDisposed)
+                {
+                    _marketWatchControl = new MarketWatchControl();
+                }
+
+                // Update Panels
+                UpdatePanelContent("Market Watch", _marketWatchControl);
 
                 EnsurePanelsVisible();
             }
@@ -380,10 +371,15 @@ namespace TraderApps.UI.Forms
                     _detailsUC = new DetailsControl();
                 }
 
+                if (_marketWatchControl == null || _marketWatchControl.IsDisposed)
+                {
+                    _marketWatchControl = new MarketWatchControl();
+                }
+
                 // ✅ Hide History, Show Journal (Pre-Login Mode)
                 _detailsUC.SetupPreLoginMode();
 
-                UpdatePanelContent("Market Watch", emptyBluePanel);
+                UpdatePanelContent("Market Watch", _marketWatchControl);
                 UpdatePanelContent("Details", _detailsUC);
             }
             finally

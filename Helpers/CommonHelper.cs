@@ -245,6 +245,38 @@ public static class CommonHelper
 
     #region Cache Loading Methods
 
+    public static async Task<MarketWatchData> LoadCachedData(string filePath, Exception ex = null)
+    {
+        try
+        {
+            if (File.Exists(filePath))
+            {
+                string encryptedContent = File.ReadAllText(filePath);
+                string decryptedContent = AESHelper.DecompressAndDecryptString(encryptedContent);
+
+                // Deserialize the cached data
+                var dataDictionary = JsonConvert.DeserializeObject<Dictionary<string, object>>(decryptedContent);
+
+                // Get specific data by key (e.g., "symbol", "user", etc.)
+                if (dataDictionary != null && dataDictionary.ContainsKey("symbol"))
+                {
+                    return JsonConvert.DeserializeObject<MarketWatchData>(dataDictionary["symbol"].ToString());
+                }
+            }
+            else
+            {
+                throw ex ?? new Exception("No cached data available.");
+            }
+        }
+        catch (Exception innerEx)
+        {
+            Console.WriteLine($"⚠️ Failed to read local backup as well.\nDetails: {innerEx.Message}", "Error");
+            throw;
+        }
+
+        return null;
+    }
+
     public static async Task<List<ClientDetails>> LoadClientDataFromCacheAsync(string filePath, Exception ex = null)
     {
         try

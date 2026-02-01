@@ -23,7 +23,7 @@ namespace TraderApps.Helpers
         public static SocketLoginInfo socketLoginInfos { get; set; }
         public static bool IsClientDataLoaded { get; set; } = false;
         public static bool IsPasswordReadOnly { get; set; } = false;
-        ////public static List<MarketWatchApiSymbol> SymbolNameList { get; internal set; }
+        public static List<MarketWatchApiSymbol> SymbolNameList { get; internal set; }
 
         public static List<ClientDetails> ClientListData { get; private set; }
         public static string Password { get; private set; }

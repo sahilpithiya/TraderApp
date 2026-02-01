@@ -1,10 +1,7 @@
 ﻿using ClientDesktop.Models;
-using Newtonsoft.Json;
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Net.Http;
-using System.Text;
 using System.Threading.Tasks;
 using TraderApp.Interfaces;
 using TraderApp.Utils.Network;
@@ -27,11 +24,7 @@ namespace TraderApp.Services
 
         public async Task<(bool Success, string ErrorMessage, List<ClientDetails> Clients, bool IsViewLocked)> GetClientListAsync(ClientDetails clientDetails)
         {
-            string domain = SessionManager.ServerListData
-                .FirstOrDefault(w => w.licenseId.ToString() == SessionManager.LicenseId)?
-                .serverDisplayName;
-
-            string folderName = AESHelper.ToBase64UrlSafe(domain);
+            string folderName = AESHelper.ToBase64UrlSafe(SessionManager.LicenseId);
             string fileName = AESHelper.ToBase64UrlSafe(SessionManager.UserId);
             string relativePath = System.IO.Path.Combine(folderName, fileName);
 

@@ -10,6 +10,7 @@ using TraderApp.Utils.Network;
 using TraderApps.Config;
 using TraderApps.Helpers;
 using TraderApps.Utils.Storage;
+using static System.Windows.Forms.VisualStyles.VisualStyleElement.StartPanel;
 
 namespace TraderApps.Services
 {
@@ -68,12 +69,10 @@ namespace TraderApps.Services
 
             string url = CommonHelper.ToReplaceUrl(AppConfig.AuthURL);
 
-            // 1. Call API
             var result = await _apiService.PostFormAsync<AuthResponse>(url, formData);
 
             if (result != null && result.isSuccess && result.data != null)
             {
-                // 2. Save Login History on success (Logic from CommonHelper moved here)
                 SaveLoginHistory(user, pass, licenseId, isRemember);
                 return (true, "Success", result.data);
             }
@@ -104,7 +103,7 @@ namespace TraderApps.Services
 
             if (existingUser != null)
             {
-                existingUser.LicenseId = SessionManager.LicenseId;
+                existingUser.Username = SessionManager.Username;
                 existingUser.Expiration = SessionManager.Expiration;
                 existingUser.ServerListData = SessionManager.ServerListData;
                 existingUser.Password = isRemember ? pass : string.Empty;

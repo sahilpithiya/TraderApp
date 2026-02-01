@@ -10,7 +10,6 @@ using TraderApps.Helpers;
 
 namespace TraderApp.Utils.Network
 {
-
     public class ApiService : IApiService
     {
         private readonly HttpClient _http;
