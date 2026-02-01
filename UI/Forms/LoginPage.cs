@@ -18,7 +18,6 @@ namespace TraderApps.Forms
         private bool isSelectedServer;
         private string isValidated = string.Empty;
 
-        // Variables for Server Filter Logic (As per your request)
         private List<ServerList> _allServers = new List<ServerList>();
         private bool _updating = false;
         private const int threshold = 3;
@@ -29,7 +28,6 @@ namespace TraderApps.Forms
         {
             InitializeComponent();
 
-            // Init Service
             _authService = new AuthService();
 
             ThemeManager.ApplyTheme(this);
@@ -45,11 +43,9 @@ namespace TraderApps.Forms
             this.MinimizeBox = false;
             this.MaximizeBox = false;
 
-            // Attach event handlers
             this.AcceptButton = loginButton;
             this.cmbLogin.KeyPress += cmbLogin_KeyPress;
 
-            // Re-attached exactly as needed for your logic
             this.cmbServerName.TextChanged += cmbServerName_TextChanged;
             this.cmbServerName.DropDown += CmbServerName_DropDown;
             this.cmbServerName.KeyDown += CmbServerName_KeyDown;
@@ -96,17 +92,12 @@ namespace TraderApps.Forms
 
             try
             {
-                bool loginSuccess = await LoginAsync(userId, password, licenseId, checkBox1.Checked);
+                // ✅ Try Login. Even if fails, we proceed (Offline/Restricted Mode)
+                await LoginAsync(userId, password, licenseId, checkBox1.Checked);
 
-                if (loginSuccess)
-                {
-                    this.DialogResult = DialogResult.OK;
-                    this.Close();
-                }
-                else if (!string.IsNullOrEmpty(isValidated))
-                {
-                    // Show error logic here if needed
-                }
+                // ✅ ALWAYS Return OK to close dialog and enter Home
+                this.DialogResult = DialogResult.OK;
+                this.Close();
             }
             finally
             {
@@ -118,6 +109,7 @@ namespace TraderApps.Forms
 
         public async Task<bool> LoginAsync(string userId, string password, string licenseId, bool isRemember = false)
         {
+            // Clear previous session first
             SessionManager.SetSession(string.Empty, userId, string.Empty ?? userId, licenseId, null, password);
 
             try
@@ -126,15 +118,23 @@ namespace TraderApps.Forms
 
                 if (!result.Success)
                 {
+                    // 🛑 LOGIN FAILED (Wrong Pass/Server Logic): Log it but don't stop
                     isValidated = result.Message;
-                    return false;
+                    FileLogger.Log("Network", $"Login Failed: {result.Message}");
+
+                    // Return TRUE so form closes, but Session Token remains EMPTY.
+                    // Home.cs checks Token to decide if history should be enabled.
+                    return true;
                 }
 
+                // ✅ LOGIN SUCCESS
                 var data = result.Data;
                 DateTime? exp = null;
                 if (DateTime.TryParse(data.expiration, out var dt)) exp = dt;
 
+                // Save Token (This enables Full Access in Home.cs)
                 SessionManager.SetSession(data.token, userId, data.name ?? userId, licenseId, exp, password);
+                FileLogger.Log("Network", $"User '{userId}' Authorized Successfully.");
 
                 var profileResult = await _authService.GetUserProfileAsync();
 
@@ -157,9 +157,11 @@ namespace TraderApps.Forms
 
                 return true;
             }
-            catch
+            catch (Exception ex)
             {
-                return false;
+                // 🛑 NETWORK/CRASH ERROR: Log it and Proceed in Restricted Mode
+                FileLogger.Log("Network", $"Login Exception: {ex.Message}");
+                return true; // Proceed to Home in Restricted Mode
             }
         }
 
@@ -200,11 +202,8 @@ namespace TraderApps.Forms
             try
             {
                 Cursor = Cursors.WaitCursor;
-
-                // 1. Get Data from Service (Handles Local File -> API internally)
                 var serverList = await _authService.GetServerListAsync();
 
-                // 2. Setup List
                 if (serverList != null && serverList.Count > 0)
                 {
                     SessionManager.SetServerList(serverList);
@@ -215,16 +214,15 @@ namespace TraderApps.Forms
                     _allServers = new List<ServerList>();
                 }
 
-                // 3. Setup Combo Properties
                 cmbServerName.DropDownStyle = ComboBoxStyle.DropDown;
-                cmbServerName.AutoCompleteMode = AutoCompleteMode.None; // Avoid native fights
+                cmbServerName.AutoCompleteMode = AutoCompleteMode.None;
                 cmbServerName.AutoCompleteSource = AutoCompleteSource.None;
 
                 cmbServerName.DisplayMember = nameof(ServerList.companyName);
                 cmbServerName.ValueMember = nameof(ServerList.licenseId);
 
-                cmbServerName.Items.Clear();      // Start empty
-                cmbServerName.SelectedIndex = -1; // No preselect
+                cmbServerName.Items.Clear();
+                cmbServerName.SelectedIndex = -1;
             }
             finally
             {
@@ -232,7 +230,6 @@ namespace TraderApps.Forms
             }
         }
 
-        // Helper Filter Method (Same as your snippet)
         private List<ServerList> Filter(string input)
         {
             if (string.IsNullOrWhiteSpace(input)) return new List<ServerList>();
@@ -246,7 +243,6 @@ namespace TraderApps.Forms
                 .ToList();
         }
 
-        // TEXT CHANGED LOGIC (Exact restore with Cursor Fix)
         private void cmbServerName_TextChanged(object sender, EventArgs e)
         {
             if (isSelectedServer) return;
@@ -256,14 +252,10 @@ namespace TraderApps.Forms
 
             try
             {
-                // 1. Save current state
                 var txt = cmbServerName.Text ?? string.Empty;
                 var caret = cmbServerName.SelectionStart;
-
-                // 2. Get Results
                 var results = Filter(txt);
 
-                // 3. UI Update
                 if (!string.IsNullOrEmpty(txt))
                 {
                     cmbServerName.BackColor = ThemeManager.White;
@@ -278,18 +270,13 @@ namespace TraderApps.Forms
                 cmbServerName.BeginUpdate();
                 try
                 {
-                    // Close before modifying list to avoid native glitches
                     cmbServerName.DroppedDown = false;
-
                     cmbServerName.Items.Clear();
                     if (results.Count > 0)
                     {
-                        // Add matching objects directly; DisplayMember handles text
                         foreach (var item in results)
                             cmbServerName.Items.Add(item);
 
-                        // Open dropdown AFTER items are ready
-                        // Do it with BeginInvoke to avoid re-entrancy
                         cmbServerName.BeginInvoke(new Action(() =>
                         {
                             if (!cmbServerName.IsDisposed && cmbServerName.IsHandleCreated && (cmbServerName.Text ?? "").Trim().Length >= threshold)
@@ -299,8 +286,7 @@ namespace TraderApps.Forms
                 }
                 finally { cmbServerName.EndUpdate(); }
 
-                // 4. RESTORE CURSOR & TEXT (This fixes the jumping)
-                cmbServerName.SelectedIndex = -1;   // prevent auto-select overriding text
+                cmbServerName.SelectedIndex = -1;
                 cmbServerName.Text = txt;
                 cmbServerName.SelectionStart = Math.Min(caret, cmbServerName.Text.Length);
                 cmbServerName.SelectionLength = 0;
@@ -354,13 +340,11 @@ namespace TraderApps.Forms
                 {
                     isSelectedServer = true;
 
-                    // Add server to items so it can be selected properly
                     if (!cmbServerName.Items.Cast<ServerList>().Any(s => s.licenseId == server.licenseId))
                     {
                         cmbServerName.Items.Add(server);
                     }
 
-                    // Select it
                     foreach (var item in cmbServerName.Items)
                     {
                         if (item is ServerList s && s.licenseId == server.licenseId)
@@ -388,7 +372,6 @@ namespace TraderApps.Forms
         #region UI Event Handlers
         private void cmbLogin_Enter(object sender, EventArgs e)
         {
-            // Use Service for History
             var loginInfoList = _authService.GetLoginHistory();
 
             if (loginInfoList != null && loginInfoList.Count > 0)

@@ -63,6 +63,7 @@ namespace TraderApp.UI.Usercontrol
         private Task _historyLoadingTask;
 
         private bool _ignoreEvents = false;
+        private TabPage _cachedHistoryTab;
         private List<string> _symbols = new List<string>();
         private List<string> _excecution = new List<string>();
         Label lbl = new Label();
@@ -78,6 +79,8 @@ namespace TraderApp.UI.Usercontrol
             ThemeManager.ApplyTheme(btnrequest);
             ThemeManager.ApplyTheme(ButtonOk);
             this.AutoScroll = true;
+
+            _cachedHistoryTab = tabHistory;
 
             // Create the main scrollable container and add it to the UserControl
             mainContainer = new Panel
@@ -111,6 +114,30 @@ namespace TraderApp.UI.Usercontrol
             //LoadHistoryView();
         }
 
+        public void EnableFullAccess()
+        {
+            // History tab wapas add karo (at index 0)
+            if (!tabControlDetails.TabPages.Contains(_cachedHistoryTab))
+            {
+                tabControlDetails.TabPages.Insert(0, _cachedHistoryTab);
+            }
+
+            // Optional: Default History pe switch karna hai to ye line uncomment karo
+            // ShowHistoryTab(); 
+        }
+
+        public void SetupPreLoginMode()
+        {
+            // History tab ko hata do
+            if (tabControlDetails.TabPages.Contains(_cachedHistoryTab))
+            {
+                tabControlDetails.TabPages.Remove(_cachedHistoryTab);
+            }
+
+            // Sirf Journal dikhao aur load karo
+            ShowJournalTab();
+        }
+
         public void LoadData()
         {
             if (tabControlDetails.SelectedTab == tabHistory)
@@ -124,7 +151,7 @@ namespace TraderApp.UI.Usercontrol
         {
             if (tabControlDetails.SelectedTab == tabHistory)
             {
-                FileLogger.Log("Testing", "Tab switched to History");
+                //FileLogger.Log("Testing", "Tab switched to History");
                 ShowHistoryTab(); // ✅ LoadHistoryView ki jagah ye naya method use karenge
             }
             else if (tabControlDetails.SelectedTab == tabJournal)

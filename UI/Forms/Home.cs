@@ -42,6 +42,7 @@ namespace TraderApps.UI.Forms
         private Dictionary<string, DockState> lastDockStates = new Dictionary<string, DockState>();
 
         private DesignTimeHelper layoutHelper;
+
         #endregion
 
         #region Nested Classes
@@ -67,11 +68,11 @@ namespace TraderApps.UI.Forms
             ThemeManager.ApplyTheme(this);
             dockPanel.Theme = new VS2015LightTheme();
             var whiteTheme = new DesignTimeHelper.DynamicColorTheme(ThemeManager.White);
-            // Apply theme to dock panel
             dockPanel.Theme = whiteTheme;
             layoutHelper = new DesignTimeHelper(dockPanel);
             dockPanel.BackColor = ThemeManager.White;
             this.FormClosing += (s, e) => layoutHelper.SaveLayout();
+
         }
 
         private void Home_Load(object sender, EventArgs e)
@@ -84,7 +85,8 @@ namespace TraderApps.UI.Forms
         #region Authentication And Login Handling
         public async void InitializeHome()
         {
-            ShowEmptyColoredLayout();
+            // ✅ Change: Empty Layout ki jagah Pre-Login Layout (Journal Only)
+            ShowPreLoginLayout();
 
             this.toolStripSeparator6.Visible = false;
 
@@ -94,7 +96,6 @@ namespace TraderApps.UI.Forms
 
             if (loginInfoList == null || !loginInfoList.Any())
             {
-                // No saved user -> Show Login -> Background will be Empty
                 ShowLoginForm();
             }
             else
@@ -112,60 +113,52 @@ namespace TraderApps.UI.Forms
                     }
                     else
                     {
-                        // Silent Login for "Remember Me"
+                        // Silent Login
                         LoginPage loginPage = new LoginPage();
-                        bool loginSuccessful = await loginPage.LoginAsync(existingUser.UserId, existingUser.Password, existingUser.LicenseId, existingUser.LastLogin);
+                        bool loginAttempt = await loginPage.LoginAsync(existingUser.UserId, existingUser.Password, existingUser.LicenseId, existingUser.LastLogin);
 
-                        if (loginSuccessful)
+                        // ✅ NOTE: Even if password fails, we might return True (Restricted Mode)
+                        // LoginLogic in LoginAsync handles the "Allow entry but log error" part.
+
+                        using (var popup = loginPage)
                         {
-                            using (var popup = loginPage)
+                            await PreloadUserControlsAsync();
+
+                            bool disclaimerAcknowledged = await ShowDisclaimerAndCheckAsync();
+                            if (disclaimerAcknowledged)
                             {
-                                await PreloadUserControlsAsync();
-
-                                bool disclaimerAcknowledged = await ShowDisclaimerAndCheckAsync();
-                                if (disclaimerAcknowledged)
+                                try
                                 {
-                                   
-                                    var specificData = await _clientService.GetSpecificClientListAsync();
-                                    clientDetails = specificData.Clients;
+                                    // Only try to load client data if we have a valid token (Full Login)
+                                    if (!string.IsNullOrEmpty(SessionManager.Token))
+                                    {
+                                        var specificData = await _clientService.GetSpecificClientListAsync();
+                                        clientDetails = specificData.Clients;
 
-                                    var result1 = await _clientService.GetClientListAsync(clientDetails);
-                                    var clients = result1.Clients;
-                                    SessionManager.IsClientDataLoaded = true;
-                                    SessionManager.SetClientList(clients);
+                                        var result1 = await _clientService.GetClientListAsync(clientDetails);
+                                        var clients = result1.Clients;
+                                        SessionManager.IsClientDataLoaded = true;
+                                        SessionManager.SetClientList(clients);
+                                    }
                                 }
-                                else
+                                catch (Exception ex)
                                 {
-                                    ShowLoginForm();
-                                    return;
+                                    FileLogger.Log("Initialization", "Client Data Load Error: " + ex.Message);
                                 }
-
-                                // SUCCESS: Now we show the panels
-                                InitializeAfterLogin(popup);
                             }
-                        }
-                        else
-                        {
-                            ShowLoginForm();
+                            else
+                            {
+                                ShowLoginForm();
+                                return;
+                            }
+
+                            InitializeAfterLogin(popup);
                         }
                     }
                 }
                 else
                 {
                     ShowLoginForm();
-                }
-            }
-        }
-
-        private void ConvertLoadedPanelsToEmpty()
-        {
-            foreach (var kv in allPanels)
-            {
-                var panel = kv.Value;
-                if (panel != null && !panel.IsDisposed)
-                {
-                    panel.Controls.Clear();
-                    panel.Controls.Add(CreateEmptyBorderedControl());
                 }
             }
         }
@@ -177,7 +170,6 @@ namespace TraderApps.UI.Forms
                 return disclaimerForm.ShowDialog() == DialogResult.OK;
             }
         }
-
 
         private async void ShowLoginForm()
         {
@@ -193,14 +185,24 @@ namespace TraderApps.UI.Forms
                     bool disclaimerAcknowledged = await ShowDisclaimerAndCheckAsync();
                     if (disclaimerAcknowledged)
                     {
-                        var clientResposne = await _clientService.GetSpecificClientListAsync();
-                        clientDetails = clientResposne.Clients;
+                        // Only fetch data if Actual Login Success (Token exists)
+                        if (!string.IsNullOrEmpty(SessionManager.Token))
+                        {
+                            try
+                            {
+                                var clientResposne = await _clientService.GetSpecificClientListAsync();
+                                clientDetails = clientResposne.Clients;
 
-                        var result1 = await _clientService.GetClientListAsync(clientDetails);
-                        var clients = result1.Clients;
-                        // Save globally
-                        SessionManager.IsClientDataLoaded = true;
-                        SessionManager.SetClientList(clients);
+                                var result1 = await _clientService.GetClientListAsync(clientDetails);
+                                var clients = result1.Clients;
+                                SessionManager.IsClientDataLoaded = true;
+                                SessionManager.SetClientList(clients);
+                            }
+                            catch (Exception ex)
+                            {
+                                FileLogger.Log("ClientService", "Failed to load clients: " + ex.Message);
+                            }
+                        }
                     }
                     else
                     {
@@ -208,7 +210,6 @@ namespace TraderApps.UI.Forms
                         return;
                     }
 
-                    // Login successful - initialize the UI with user controls
                     InitializeAfterLogin(popup);
                 }
             }
@@ -249,18 +250,27 @@ namespace TraderApps.UI.Forms
                 lblMarket.Dock = DockStyle.Fill;
                 lblMarket.Font = new Font("Segoe UI", 14, FontStyle.Bold);
 
-
                 if (_detailsUC == null || _detailsUC.IsDisposed)
                 {
                     _detailsUC = new DetailsControl();
                 }
 
-                _detailsUC.LoadData();
+                // ✅ CRITICAL LOGIC: Check if this is a "Full Login" or "Restricted Entry"
+                if (!string.IsNullOrEmpty(SessionManager.Token))
+                {
+                    // Success: Enable History & Load Data
+                    _detailsUC.EnableFullAccess();
+                    _detailsUC.LoadData();
+                    FileLogger.Log("System", "Login Successful. Full Access Enabled.");
+                }
+                else
+                {
+                    // Restricted: Keep History Hidden, Show only Journal
+                    _detailsUC.SetupPreLoginMode();
+                    FileLogger.Log("System", "Restricted Mode: History disabled due to login failure.");
+                }
 
                 UpdatePanelContent("Details", _detailsUC);
-
-
-                // Update Panels
                 UpdatePanelContent("Market Watch", lblMarket);
 
                 EnsurePanelsVisible();
@@ -287,7 +297,6 @@ namespace TraderApps.UI.Forms
             {
                 panel = new DesignTimeHelper.DynamicDockContent(key, null);
                 panel.FormClosing += Dock_FormClosing;
-                // TrackPanel(panel); // Add this if you have the tracking method
                 allPanels[key] = panel;
             }
 
@@ -295,14 +304,13 @@ namespace TraderApps.UI.Forms
             panel.Controls.Add(newContent);
             panel.Text = key;
 
-            // --- CRITICAL CHANGE FOR LAYOUT ---
             if (key == "Market Watch")
             {
                 panel.Show(dockPanel, DockState.Document);
             }
             else if (key == "Details")
             {
-                panel.Show(dockPanel, DockState.DockBottom); 
+                panel.Show(dockPanel, DockState.DockBottom);
             }
         }
 
@@ -312,7 +320,6 @@ namespace TraderApps.UI.Forms
             {
                 if (kv.Value.DockState == DockState.Hidden)
                 {
-                    // Restore to last known state or default
                     var state = lastDockStates.TryGetValue(kv.Key, out var s) ? s : DockState.Document;
                     kv.Value.Show(dockPanel, state);
                 }
@@ -326,9 +333,6 @@ namespace TraderApps.UI.Forms
         private async Task PreloadUserControlsAsync()
         {
             if (_isUserControlsPreloaded) return;
-
-            //_detailsUC = new DetailsControl();
-
             _isUserControlsPreloaded = true;
         }
 
@@ -336,18 +340,18 @@ namespace TraderApps.UI.Forms
         {
             var borderedPanel = new Panel
             {
-                BackColor = Color.White, // Changed to White for cleaner look
+                BackColor = Color.White,
                 BorderStyle = BorderStyle.FixedSingle,
                 Dock = DockStyle.Fill
             };
 
             var label = new Label
             {
-                Text = title, // <--- FIXED: Now uses the title ("Market Watch", etc.)
+                Text = title,
                 TextAlign = ContentAlignment.MiddleCenter,
                 Dock = DockStyle.Fill,
                 ForeColor = Color.Black,
-                Font = new Font("Segoe UI", 12, FontStyle.Bold) // Made it visible
+                Font = new Font("Segoe UI", 12, FontStyle.Bold)
             };
 
             borderedPanel.Controls.Add(label);
@@ -358,22 +362,29 @@ namespace TraderApps.UI.Forms
             return dockContent;
         }
 
-        private void ShowEmptyColoredLayout()
+        // ✅ REPLACED: ShowEmptyColoredLayout -> ShowPreLoginLayout
+        private void ShowPreLoginLayout()
         {
             this.SuspendLayout();
             dockPanel.SuspendLayout(true);
             try
             {
-                // 1. Set 30% Height for Bottom Panel
                 dockPanel.DockBottomPortion = this.Height * 0.30;
 
-                // 2. Create EMPTY colored panels (No Text)
+                // Market Watch Placeholder
                 Panel emptyBluePanel = new Panel { BackColor = Color.AliceBlue, Dock = DockStyle.Fill };
-                Panel emptyPinkPanel = new Panel { BackColor = Color.MistyRose, Dock = DockStyle.Fill };
 
-                // 3. Add them to Dock
+                // ✅ Initialize Real Details Control
+                if (_detailsUC == null || _detailsUC.IsDisposed)
+                {
+                    _detailsUC = new DetailsControl();
+                }
+
+                // ✅ Hide History, Show Journal (Pre-Login Mode)
+                _detailsUC.SetupPreLoginMode();
+
                 UpdatePanelContent("Market Watch", emptyBluePanel);
-                UpdatePanelContent("Details", emptyPinkPanel);
+                UpdatePanelContent("Details", _detailsUC);
             }
             finally
             {
@@ -406,14 +417,9 @@ namespace TraderApps.UI.Forms
                 if (panel != null)
                 {
                     panel.Hide();
-
-                    // mark as hidden in dropdown
                     foreach (ToolStripMenuItem item in panelsDropdown.DropDownItems)
                     {
-                        if (item.Text == panel.Text)
-                        {
-                            item.Checked = false;
-                        }
+                        if (item.Text == panel.Text) item.Checked = false;
                     }
                 }
             }
@@ -432,8 +438,8 @@ namespace TraderApps.UI.Forms
             {
                 var item = new ToolStripMenuItem(kv.Key);
                 item.Tag = kv.Value;
-                item.Checked = kv.Value.Visible; // checked if hidden
-                item.CheckOnClick = false; // prevent auto toggle, we manage manually
+                item.Checked = kv.Value.Visible;
+                item.CheckOnClick = false;
                 item.Click += HiddenPanel_Click;
                 panelsDropdown.DropDownItems.Add(item);
             }
@@ -468,7 +474,7 @@ namespace TraderApps.UI.Forms
         private void ApplyDefaultLayout()
         {
             bool isLoggedIn = !string.IsNullOrEmpty(toolStripDropDownUserButton.Text);
-            EnsurePanelsCreated(isLoggedIn); // defined below
+            EnsurePanelsCreated(isLoggedIn);
 
             this.SuspendLayout();
             dockPanel.SuspendLayout(true);
@@ -503,7 +509,6 @@ namespace TraderApps.UI.Forms
 
         private void EnsurePanelsCreated(bool isLoggedIn)
         {
-            // if any missing/disposed, (re)create it ONCE
             DockContent GetOrCreate(string key, Func<DockContent> factory)
             {
                 if (allPanels.TryGetValue(key, out var pane) && !pane.IsDisposed) return pane;
@@ -515,7 +520,6 @@ namespace TraderApps.UI.Forms
                 return created;
             }
 
-            
             GetOrCreate("Market Watch", () => CreateEmptyDockContentWithBorder("Market Watch"));
             GetOrCreate("Details", () => CreateEmptyDockContentWithBorder("Details"));
         }
@@ -538,20 +542,8 @@ namespace TraderApps.UI.Forms
                 return;
             }
 
-            // ---------- FROM HERE ↓ WE ARE 100% ON UI THREAD ----------
-
             if (disconnectToolStripMenuItem.Text != "Connect" || IsComeFromSocket)
             {
-                //_safeDispose(_marketWatchUC);
-                //_safeDispose(_navigationUC);
-                //_safeDispose(_chartUC);
-                //_safeDispose(_detailsUC);
-
-                //_marketWatchUC = null;
-                //_navigationUC = null;
-                //_chartUC = null;
-                //_detailsUC = null;
-
                 _isUserControlsPreloaded = false;
 
                 this.SuspendLayout();
@@ -580,9 +572,10 @@ namespace TraderApps.UI.Forms
                 this.panelsDropdown.Visible = false;
                 this.toolStripSeparator6.Visible = false;
 
-                //ShowEmptyDockLayout();
                 SessionManager.ClearSession();
 
+                // Switch back to Pre-Login Layout (Journal Only)
+                ShowPreLoginLayout();
             }
             ShowLoginForm();
         }
@@ -591,7 +584,6 @@ namespace TraderApps.UI.Forms
         {
             var borderedPanel = new Panel
             {
-                //BackColor = ThemeManager.Gray,
                 BorderStyle = BorderStyle.FixedSingle,
                 Dock = DockStyle.Fill
             };
@@ -645,6 +637,11 @@ namespace TraderApps.UI.Forms
                 c.Dispose();
         }
 
+        private void Home_FormClosing(object sender, FormClosingEventArgs e)
+        {
+            //_networkMonitor?.Stop();
+        }
+
         #endregion
 
         #region UI Event Handlers
@@ -660,37 +657,6 @@ namespace TraderApps.UI.Forms
             //TradeOrder tradeOrderForm = new TradeOrder(IsFromMarketWatch: true);
             //tradeOrderForm.ShowDialog();
         }
-
-        //public void OpenChart(string displaySymbol)
-        //{
-        //    // Get master symbol from SessionManager
-        //    var symbolInfo = SessionManager.SymbolNameList
-        //        .FirstOrDefault(q => q.symbolName.Equals(displaySymbol));
-
-        //    if (symbolInfo == null)
-        //    {
-        //        MessageBox.Show($"Symbol '{displaySymbol}' not found!", "Error",
-        //                        MessageBoxButtons.OK, MessageBoxIcon.Error);
-        //        return;
-        //    }
-
-        //    string masterSymbol = symbolInfo.masterSymbolName;
-
-        //    //foreach (IDockContent document in dockPanel.Contents)
-        //    //{
-        //    //    if (document is ChartWindow existingChart &&
-        //    //        existingChart.Tag?.ToString() == displaySymbol)
-        //    //    {
-        //    //        existingChart.Activate();
-        //    //        return;
-        //    //    }
-        //    //}
-
-        //    // Create new chart with display symbol
-        //    var newChart = new ChartWindow(displaySymbol);
-        //    newChart.Tag = displaySymbol; // Track by master symbol
-        //    newChart.Show(this.dockPanel, DockState.Document);
-        //}
 
         #endregion
     }
