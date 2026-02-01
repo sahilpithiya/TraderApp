@@ -10,5 +10,7 @@ namespace TraderApp.Interfaces
         Task<T> PostAsync<T>(string url, object data);
 
         Task<T> PostFormAsync<T>(string url, Dictionary<string, string> data);
+
+        Task<T> PutAsync<T>(string url, object data);
     }
 }

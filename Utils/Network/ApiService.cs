@@ -20,11 +20,20 @@ namespace TraderApp.Utils.Network
             _http.Timeout = TimeSpan.FromSeconds(30);
         }
 
+        private void AddAuthHeader()
+        {
+            _http.DefaultRequestHeaders.Authorization = null;
+            if (!string.IsNullOrEmpty(SessionManager.Token))
+            {
+                _http.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", SessionManager.Token);
+            }
+        }
+
         public async Task<T> GetAsync<T>(string url)
         {
             try
             {
-                _http.AddAuthHeader();
+                AddAuthHeader();
                 var response = await _http.GetAsync(url);
 
                 if (!response.IsSuccessStatusCode) return default;
@@ -39,7 +48,7 @@ namespace TraderApp.Utils.Network
         {
             try
             {
-                _http.AddAuthHeader();
+                AddAuthHeader();
                 var json = JsonConvert.SerializeObject(data);
                 var content = new StringContent(json, Encoding.UTF8, "application/json");
 
@@ -60,11 +69,29 @@ namespace TraderApp.Utils.Network
         {
             try
             {
-                _http.AddAuthHeader();
+                AddAuthHeader();
                 var content = new FormUrlEncodedContent(data);
                 var response = await _http.PostAsync(url, content);
                 var json = await response.Content.ReadAsStringAsync();
                 return JsonConvert.DeserializeObject<T>(json);
+            }
+            catch { return default; }
+        }
+
+        public async Task<T> PutAsync<T>(string url, object data)
+        {
+            try
+            {
+                AddAuthHeader();
+                var json = JsonConvert.SerializeObject(data);
+                var content = new StringContent(json, Encoding.UTF8, "application/json");
+
+                var response = await _http.PutAsync(url, content);
+
+                if (!response.IsSuccessStatusCode) return default;
+
+                var responseJson = await response.Content.ReadAsStringAsync();
+                return JsonConvert.DeserializeObject<T>(responseJson);
             }
             catch { return default; }
         }

@@ -13,6 +13,7 @@ using System.Text;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 using TraderApp.Properties;
+using TraderApp.Services;
 using TraderApp.Utils.Network;
 using TraderApps.Config;
 using TraderApps.Helpers;
@@ -34,6 +35,9 @@ namespace TraderApp.UI.Usercontrol
         private bool _isUpdatingSymbols = false;
         private bool _updatePending = false;
 
+        // Service Instance
+        private readonly MarketWatchService _marketWatchService;
+
         int dragRow = -1;
         Label dragLabel = null;
 
@@ -47,16 +51,16 @@ namespace TraderApp.UI.Usercontrol
         public MarketWatchControl()
         {
             InitializeComponent();
+
+            // Initialize Service
+            _marketWatchService = new MarketWatchService();
+
             this.AutoScaleMode = AutoScaleMode.Dpi;
             ThemeManager.ApplyTheme(this);
             ThemeManager.ApplyTheme(dgvMarketWatchGrid);
             ThemeManager.ApplyTheme(btnSaveSymbol);
             date_timeLabel.Font = ThemeManager.CommonBoldFont;
             _tickQueue = new ConcurrentQueue<MarketWatchSymbols>();
-
-            // Call Socket Action 
-            //SocketManager.OnPositionUpdated += SocketManager_OnPositionUpdated;
-            //SocketManager.OnSocketReconnected += SocketManager_OnReconnected;
 
             // Set up timer for time updates
             var timer = new Timer();
@@ -86,7 +90,7 @@ namespace TraderApp.UI.Usercontrol
         {
             try
             {
-                var marketWatchData = await LoadMarketWatchDataFromApiAsync();
+                var marketWatchData = await _marketWatchService.GetMarketWatchDataAsync();
 
                 if (marketWatchData?.symbols == null || marketWatchData.symbols.Count == 0)
                     return;
@@ -108,75 +112,6 @@ namespace TraderApp.UI.Usercontrol
             catch (Exception ex)
             {
                 Console.Write("Error loading market watch data: " + ex.Message);
-            }
-        }
-
-        private async Task<MarketWatchData> LoadMarketWatchDataFromApiAsync()
-        {
-            string domain = SessionManager.ServerListData?
-                .FirstOrDefault(w => w.licenseId.ToString() == SessionManager.LicenseId)
-                ?.serverDisplayName;
-
-            string folder = Path.Combine(AppConfig.dataFolder, AESHelper.ToBase64UrlSafe(domain));
-            string fileName = $"{AESHelper.ToBase64UrlSafe(SessionManager.UserId)}.dat";
-            string filePath = Path.Combine(folder, fileName);
-
-            try
-            {
-                using (var client = new HttpClient())
-                {
-                    client.Timeout = TimeSpan.FromSeconds(30);
-                    client.DefaultRequestHeaders.Accept.Clear();
-                    client.DefaultRequestHeaders.Accept.Add(
-                        new System.Net.Http.Headers.MediaTypeWithQualityHeaderValue("application/json"));
-                    client.AddAuthHeader();
-
-                    var response = await client.GetAsync(AppConfig.MarketWatchInitDataUrl.ToReplaceUrl());
-
-                    if (response.IsSuccessStatusCode)
-                    {
-                        string jsonString = await response.Content.ReadAsStringAsync();
-                        var apiResponse = JsonConvert.DeserializeObject<MarketWatchApiResponse>(jsonString);
-
-                        if (apiResponse?.isSuccess == true && apiResponse.data != null)
-                        {
-                            // Serialize and encrypt the fresh data
-                            string responseJson = JsonConvert.SerializeObject(apiResponse.data);
-                            string encrypted = AESHelper.CompressAndEncryptString(responseJson);
-
-                            // Load existing data (if any)
-                            var existingData = File.Exists(filePath)
-                                ? JsonConvert.DeserializeObject<Dictionary<string, object>>(AESHelper.DecompressAndDecryptString(File.ReadAllText(filePath)))
-                                : new Dictionary<string, object>();
-
-                            // Add/update the new symbol/user data
-                            existingData["symbol"] = apiResponse.data;  // Replace "symbol" with the relevant key if needed
-
-                            // Serialize the dictionary and save it
-                            string updatedJson = JsonConvert.SerializeObject(existingData);
-                            string encryptedUpdatedJson = AESHelper.CompressAndEncryptString(updatedJson);
-
-                            CommonHelper.SaveEncryptedData(folder, AESHelper.ToBase64UrlSafe(SessionManager.UserId), encryptedUpdatedJson);
-
-                            return apiResponse.data;
-                        }
-                        else
-                        {
-                            // Handle case where API responds but data is invalid
-                            return await CommonHelper.LoadCachedData(filePath);
-                        }
-                    }
-                    else
-                    {
-                        // Handle API failure and fallback to local file
-                        return await CommonHelper.LoadCachedData(filePath);
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                // Final fallback: try local file before showing error
-                return await CommonHelper.LoadCachedData(filePath, ex);
             }
         }
 
@@ -690,7 +625,8 @@ namespace TraderApp.UI.Usercontrol
         {
             if (symbolIds == null || symbolIds.Count == 0) return;
 
-            var hideSymbol = await CallHideApiAsync(symbolIds);
+            // Refactored: Use Service
+            var hideSymbol = await _marketWatchService.HideSymbolsAsync(symbolIds);
             if (hideSymbol == null) return;
 
             // Process successful hide operation
@@ -721,53 +657,6 @@ namespace TraderApp.UI.Usercontrol
             }
         }
 
-        private async Task<HideSymbolResponse> CallHideApiAsync(List<int> symbolIds)
-        {
-            if (symbolIds == null || symbolIds.Count == 0)
-                return null;
-
-            try
-            {
-                using (var client = new HttpClient())
-                {
-                    client.Timeout = TimeSpan.FromSeconds(30);
-                    client.DefaultRequestHeaders.Accept.Clear();
-                    client.DefaultRequestHeaders.Accept.Add(
-                        new System.Net.Http.Headers.MediaTypeWithQualityHeaderValue("application/json"));
-                    client.AddAuthHeader();
-
-                    var payload = new { symbolId = symbolIds };
-                    var json = JsonConvert.SerializeObject(payload);
-                    var content = new StringContent(json, System.Text.Encoding.UTF8, "application/json");
-                    var response = await client.PutAsync(AppConfig.MarketWatchHideApiUrl.ToReplaceUrl(), content);
-                    var respBody = await response.Content.ReadAsStringAsync();
-
-                    if (!response.IsSuccessStatusCode)
-                    {
-                        Console.WriteLine($"Hide API HTTP Error: {response.StatusCode} - {respBody}");
-                        return null;
-                    }
-
-                    var apiResp = JsonConvert.DeserializeObject<HideSymbolResponse>(respBody);
-
-                    if (apiResp != null && apiResp.isSuccess)
-                    {
-                        return apiResp;
-                    }
-                    else
-                    {
-                        string err = apiResp?.exception ?? "Unknown error";
-                        Console.WriteLine($"Hide failed: {err}", "Error");
-                        return null;
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"Hide API exception: {ex.Message}");
-                return null;
-            }
-        }
 
         private async void OnShowAll_Click(object sender, EventArgs e)
         {
@@ -1202,35 +1091,16 @@ namespace TraderApp.UI.Usercontrol
                     symbolsConfig = symbolsConfig
                 };
 
-                var json = JsonConvert.SerializeObject(payload);
-                var content = new StringContent(json, System.Text.Encoding.UTF8, "application/json");
+                // Refactored: Uses Service
+                var apiResp = await _marketWatchService.SaveProfileAsync(payload);
 
-                using (var client = new HttpClient())
+                if (apiResp?.isSuccess == true)
                 {
-                    client.Timeout = TimeSpan.FromSeconds(30);
-                    client.DefaultRequestHeaders.Accept.Clear();
-                    client.DefaultRequestHeaders.Accept.Add(new System.Net.Http.Headers.MediaTypeWithQualityHeaderValue("application/json"));
-                    client.AddAuthHeader();
-
-                    var response = await client.PostAsync(AppConfig.MarketWatchSaveClientProfileUrl.ToReplaceUrl(), content);
-                    var respBody = await response.Content.ReadAsStringAsync();
-
-                    if (!response.IsSuccessStatusCode)
-                    {
-                        Console.WriteLine($"Save Profile HTTP Error: {respBody}");
-                        return;
-                    }
-
-                    var apiResp = JsonConvert.DeserializeObject<HideSymbolResponse>(respBody);
-
-                    if (apiResp?.isSuccess == true)
-                    {
-                        //MessagePopup.ShowPopup(apiResp.successMessage ?? CommonMessages.ProfileSaved, true);
-                    }
-                    else
-                    {
-                        //MessagePopup.ShowPopup(CommonMessages.ProfileFailedToSaved);
-                    }
+                    //MessagePopup.ShowPopup(apiResp.successMessage ?? CommonMessages.ProfileSaved, true);
+                }
+                else
+                {
+                    //MessagePopup.ShowPopup(CommonMessages.ProfileFailedToSaved);
                 }
             }
             catch (Exception ex)

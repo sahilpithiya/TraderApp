@@ -76,8 +76,6 @@ namespace TraderApps.UI.Forms
         #region Authentication And Login Handling
         public async void InitializeHome()
         {
-            // ✅ Change: Empty Layout ki jagah Pre-Login Layout (Journal Only)
-            ShowPreLoginLayout();
 
             this.toolStripSeparator6.Visible = false;
 
@@ -96,6 +94,7 @@ namespace TraderApps.UI.Forms
                 {
                     SessionManager.SetServerList(existingUser.ServerListData);
                     SessionManager.SetSession(null, existingUser.UserId, existingUser.Username, existingUser.LicenseId, null, existingUser.Password);
+                    ShowPreLoginLayout();
 
                     if (string.IsNullOrEmpty(existingUser.Password))
                     {
