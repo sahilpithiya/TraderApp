@@ -1,15 +1,11 @@
 ﻿using ClientDesktop.Models;
-using Newtonsoft.Json;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Data;
 using System.Drawing;
-using System.IO;
 using System.Linq;
-using System.Net.Http;
-using System.Text;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 using TraderApp.Helpers;
@@ -373,7 +369,7 @@ namespace TraderApp.UI.Usercontrol
             foreach (DataGridViewColumn column in dgvMarketWatchGrid.Columns)
             {
                 // Skip the columns that you don't want to display in the menu (e.g., certain default columns)
-                string[] excludedColumn = { "SymbolName", "Bid", "Ask", "Low" };
+                string[] excludedColumn = { "SymbolName", "Bid", "Ask", "Low", "DragHandle" };
                 if (excludedColumn.Contains(column.Name)) continue;
 
                 string text = string.Empty;
