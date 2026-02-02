@@ -24,93 +24,162 @@ namespace TraderApp.Services
             _apiService = new ApiService();
         }
 
-        #region Core Data Loading Logic (Cache + API)
+        #region Core Data Loading Logic (Cache + API with Fallback)
 
+        /// <summary>
+        /// Loads History (Deals/Orders). 
+        /// Strategy: Always load local cache first. If API is needed but fails, return local cache.
+        /// </summary>
         public async Task<List<HistoryModel>> GetDealsOrOrdersDataAsync(string userId, string licenseId, string domain)
         {
+            // 1. Path Calculation
             string filePath = GetUserFilePath(domain, userId);
-            List<HistoryModel> historyList = CommonHelper.LoadHistoryDataFromCache(filePath);
 
-            bool needFetch = false;
-            DateTime fromDate = (licenseId == "1") ? new DateTime(2025, 6, 1) : new DateTime(1970, 1, 1);
-            DateTime toDate = DateTime.Today;
-
-            if (historyList == null || historyList.Count == 0)
+            // 2. Load from Cache (IMMEDIATE FALLBACK)
+            // We load this FIRST. If API fails later, this variable holds the data to be returned.
+            List<HistoryModel> historyList = null;
+            try
             {
-                needFetch = true;
+                historyList = CommonHelper.LoadHistoryDataFromCache(filePath);
             }
-            else
+            catch (Exception ex)
             {
-                var lastDate = historyList.Max(h => h.createdOn);
-                if (lastDate.Date <= DateTime.Today)
+                Console.WriteLine("Cache Load Error: " + ex.Message);
+            }
+
+            // Ensure list is never null
+            if (historyList == null) historyList = new List<HistoryModel>();
+
+            try
+            {
+                // 3. Logic to determine if we need to fetch from API
+                bool needFetch = false;
+                DateTime fromDate = (licenseId == "1") ? new DateTime(2025, 6, 1) : new DateTime(1970, 1, 1);
+                DateTime toDate = DateTime.Today;
+
+                if (historyList.Count == 0)
                 {
-                    fromDate = lastDate;
-                    toDate = DateTime.Today.AddDays(1);
+                    // Cache is empty, force fetch
                     needFetch = true;
                 }
-            }
-
-            if (needFetch)
-            {
-                var dealerId = SessionManager.ClientListData.FirstOrDefault()?.DealerId;
-
-                var (success, error, apiData) = await FetchHistoryFromApiAsync(userId, dealerId, fromDate, toDate, licenseId);
-
-                if (success && apiData?.Count > 0)
+                else
                 {
-                    if (historyList == null) historyList = new List<HistoryModel>();
-
-                    var dataToRemove = historyList.Where(h => h.createdOn >= fromDate && h.createdOn <= toDate).ToList();
-                    foreach (var item in dataToRemove) historyList.Remove(item);
-
-                    historyList.AddRange(apiData);
-
-                    await SaveHistoryDataToCacheAsync(filePath, historyList);
+                    // Incremental update check
+                    var lastDate = historyList.Max(h => h.createdOn);
+                    if (lastDate.Date <= DateTime.Today)
+                    {
+                        fromDate = lastDate;
+                        toDate = DateTime.Today.AddDays(1);
+                        needFetch = true;
+                    }
                 }
+
+                // 4. Fetch from API if needed
+                if (needFetch)
+                {
+                    var dealerId = SessionManager.ClientListData.FirstOrDefault()?.DealerId;
+
+                    var (success, error, apiData) = await FetchHistoryFromApiAsync(userId, dealerId, fromDate, toDate, licenseId);
+
+                    if (success && apiData != null && apiData.Count > 0)
+                    {
+                        // Remove overlaps and add new data
+                        var dataToRemove = historyList.Where(h => h.createdOn >= fromDate && h.createdOn <= toDate).ToList();
+                        foreach (var item in dataToRemove) historyList.Remove(item);
+
+                        historyList.AddRange(apiData);
+
+                        // Save back to Cache (Update local storage)
+                        await SaveHistoryDataToCacheAsync(filePath, historyList);
+                    }
+                    else
+                    {
+                        // API FAILED: We intentionally do nothing here.
+                        // 'historyList' still contains the data loaded from cache at step 2.
+                        // This ensures the grid shows whatever local data we have.
+                        Console.WriteLine($"API Fetch failed: {error}. Returning cached data.");
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                // Safety net: If logic crashes, log it and return whatever we managed to load from cache
+                Console.WriteLine("Error in GetDealsOrOrdersDataAsync: " + ex.Message);
             }
 
             return historyList;
         }
 
+        /// <summary>
+        /// Loads Position History.
+        /// Strategy: Always load local cache first. If API is needed but fails, return local cache.
+        /// </summary>
         public async Task<List<PositionHistoryModel>> GetPositionHistoryDataAsync(string userId, string licenseId, string domain)
         {
+            // 1. Path Calculation
             string filePath = GetUserFilePath(domain, userId);
-            List<PositionHistoryModel> posList = CommonHelper.LoadPositionHistoryDataFromCache(filePath);
 
-            bool needFetch = false;
-            DateTime fromDate = (licenseId == "1") ? new DateTime(2025, 6, 1) : new DateTime(1970, 1, 1);
-            DateTime toDate = DateTime.Today;
-
-            if (posList == null || posList.Count == 0)
+            // 2. Load from Cache (IMMEDIATE FALLBACK)
+            List<PositionHistoryModel> posList = null;
+            try
             {
-                needFetch = true;
+                posList = CommonHelper.LoadPositionHistoryDataFromCache(filePath);
             }
-            else
+            catch
             {
-                var lastDate = posList.Max(h => h.UpdatedAt);
-                if (lastDate.Date <= DateTime.Today)
+                // Ignore cache errors
+            }
+
+            if (posList == null) posList = new List<PositionHistoryModel>();
+
+            try
+            {
+                // 3. Logic to determine if we need to call API
+                bool needFetch = false;
+                DateTime fromDate = (licenseId == "1") ? new DateTime(2025, 6, 1) : new DateTime(1970, 1, 1);
+                DateTime toDate = DateTime.Today;
+
+                if (posList.Count == 0)
                 {
-                    fromDate = lastDate;
-                    toDate = DateTime.Today.AddDays(1);
                     needFetch = true;
                 }
-            }
-
-            if (needFetch)
-            {
-                var (success, error, apiData) = await FetchPositionHistoryFromApiAsync(userId, fromDate, toDate, licenseId);
-
-                if (success && apiData?.Count > 0)
+                else
                 {
-                    if (posList == null) posList = new List<PositionHistoryModel>();
-
-                    var dataToRemove = posList.Where(h => h.LastOutAt == null || (h.UpdatedAt >= fromDate && h.UpdatedAt <= toDate)).ToList();
-                    foreach (var item in dataToRemove) posList.Remove(item);
-
-                    posList.AddRange(apiData);
-
-                    await SavePositionHistoryDataToCacheAsync(filePath, posList);
+                    var lastDate = posList.Max(h => h.UpdatedAt);
+                    if (lastDate.Date <= DateTime.Today)
+                    {
+                        fromDate = lastDate;
+                        toDate = DateTime.Today.AddDays(1);
+                        needFetch = true;
+                    }
                 }
+
+                // 4. Fetch from API if needed
+                if (needFetch)
+                {
+                    var (success, error, apiData) = await FetchPositionHistoryFromApiAsync(userId, fromDate, toDate, licenseId);
+
+                    if (success && apiData != null && apiData.Count > 0)
+                    {
+                        // Clean overlaps for open positions or updated records
+                        var dataToRemove = posList.Where(h => h.LastOutAt == null || (h.UpdatedAt >= fromDate && h.UpdatedAt <= toDate)).ToList();
+                        foreach (var item in dataToRemove) posList.Remove(item);
+
+                        posList.AddRange(apiData);
+
+                        // Save Cache
+                        await SavePositionHistoryDataToCacheAsync(filePath, posList);
+                    }
+                    else
+                    {
+                        // API FAILED: Fallback to existing cache
+                        Console.WriteLine($"API Position Fetch failed: {error}. Returning cached data.");
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine("Error in GetPositionHistoryDataAsync: " + ex.Message);
             }
 
             return posList;
@@ -198,6 +267,12 @@ namespace TraderApp.Services
 
                 using (var response = await _apiService.PostRawAsync(AppConfig.GetHistoryForClient.ToReplaceUrl(), content))
                 {
+                    // ✅ FIX: Check if Content is null before accessing it
+                    if (response.Content == null)
+                    {
+                        return (false, $"{(int)response.StatusCode}: {response.ReasonPhrase}", null);
+                    }
+
                     var responseString = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
 
                     if (!response.IsSuccessStatusCode)
@@ -237,9 +312,14 @@ namespace TraderApp.Services
                 var json = JsonConvert.SerializeObject(payload);
                 var content = new StringContent(json, Encoding.UTF8, "application/json");
 
-                // ✅ Updated: Uses _apiService.PostRawAsync
                 using (var response = await _apiService.PostRawAsync(AppConfig.GetPositionHistoryForClient.ToReplaceUrl(), content).ConfigureAwait(false))
                 {
+                    // ✅ FIX: Check if Content is null here too
+                    if (response.Content == null)
+                    {
+                        return (false, $"{(int)response.StatusCode}: {response.ReasonPhrase}", null);
+                    }
+
                     var responseString = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
 
                     if (!response.IsSuccessStatusCode)

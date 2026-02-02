@@ -1193,6 +1193,7 @@ namespace TraderApp.UI.Usercontrol
                 ReadOnly = true,
                 ColumnHeadersHeight = CommonHelper.GetScaled(35)
             };
+
             typeof(DataGridView).InvokeMember("DoubleBuffered", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.SetProperty, null, newDataGrid, new object[] { true });
             ThemeManager.ApplyTheme(newDataGrid);
             return newDataGrid;
