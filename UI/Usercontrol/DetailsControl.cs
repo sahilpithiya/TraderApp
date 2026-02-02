@@ -135,9 +135,15 @@ namespace TraderApp.UI.Usercontrol
         private void TabControlDetails_SelectedIndexChanged(object sender, EventArgs e)
         {
             if (tabControlDetails.SelectedTab == tabHistory)
+            {
+                //FileLogger.Log("UI", "Switched to History Tab");
                 ShowHistoryTab();
+            }
             else if (tabControlDetails.SelectedTab == tabJournal)
+            {
+                //FileLogger.Log("UI", "Switched to Journal Tab");
                 ShowJournalTab();
+            }
         }
 
         private async void ShowHistoryTab()
@@ -171,13 +177,10 @@ namespace TraderApp.UI.Usercontrol
 
             FilterPanel.Visible = false;
 
-            // ✅ FIX START: Check if journalDataGrid exists but was removed from mainContainer
-            // ResetPanel() call in History might have cleared it from controls
             if (journalDataGrid != null && !mainContainer.Controls.Contains(journalDataGrid))
             {
                 mainContainer.Controls.Add(journalDataGrid);
             }
-            // ✅ FIX END
 
             if (journalDataGrid == null)
             {
@@ -242,6 +245,7 @@ namespace TraderApp.UI.Usercontrol
 
         private Task TriggerHistoryLoad()
         {
+            FileLogger.Log("History", "Background loading of history data started");
             return _historyLoadingTask = Task.Run(async () =>
             {
                 string domain = SessionManager.ServerListData
@@ -368,6 +372,9 @@ namespace TraderApp.UI.Usercontrol
             historyDataGrid.CellClick -= historyDataGrid_CellClick;
             historyDataGrid.CellClick += historyDataGrid_CellClick;
             historyDataGrid.ColumnHeaderMouseClick += historyDataGrid_ColumnHeaderMouseClick;
+
+            // Log View Change
+            //FileLogger.Log("UI", $"View changed to {viewType}");
         }
 
         private DataGridView CreateHistoryDataGrid(string viewType)
@@ -392,7 +399,7 @@ namespace TraderApp.UI.Usercontrol
                     historyDataGrid.Columns.Add(new DataGridViewTextBoxColumn { Name = "Price", HeaderText = "Price", DataPropertyName = "Price", SortMode = DataGridViewColumnSortMode.Programmatic, MinimumWidth = CommonHelper.GetScaled(190), DefaultCellStyle = CreateDefaultCellStyle() });
                     historyDataGrid.Columns.Add(new DataGridViewTextBoxColumn { Name = "Comm", HeaderText = "Comm.", DataPropertyName = "Comm", SortMode = DataGridViewColumnSortMode.Programmatic, MinimumWidth = CommonHelper.GetScaled(140), DefaultCellStyle = CreateDefaultCellStyle() });
                     historyDataGrid.Columns.Add(new DataGridViewTextBoxColumn { Name = "Profit", HeaderText = "Profit", DataPropertyName = "Profit", SortMode = DataGridViewColumnSortMode.Programmatic, MinimumWidth = CommonHelper.GetScaled(140), DefaultCellStyle = CreateDefaultCellStyle() });
-                    historyDataGrid.Columns.Add(new DataGridViewTextBoxColumn { Name = "Comment", HeaderText = "Comment", DataPropertyName = "Comment", SortMode = DataGridViewColumnSortMode.Programmatic, MinimumWidth = CommonHelper.GetScaled(200) });
+                    // Comment Column Removed
                     break;
                 case "Position":
                     historyDataGrid.Columns.Add(new DataGridViewTextBoxColumn { Name = "Time", HeaderText = "Time", DataPropertyName = "Time", SortMode = DataGridViewColumnSortMode.Programmatic, MinimumWidth = CommonHelper.GetScaled(180) });
@@ -404,7 +411,7 @@ namespace TraderApp.UI.Usercontrol
                     historyDataGrid.Columns.Add(new DataGridViewTextBoxColumn { Name = "Price", HeaderText = "Price", DataPropertyName = "Price", SortMode = DataGridViewColumnSortMode.Programmatic, MinimumWidth = CommonHelper.GetScaled(120), DefaultCellStyle = CreateDefaultCellStyle() });
                     historyDataGrid.Columns.Add(new DataGridViewTextBoxColumn { Name = "Comm", HeaderText = "Comm.", DataPropertyName = "Comm", SortMode = DataGridViewColumnSortMode.Programmatic, MinimumWidth = CommonHelper.GetScaled(300), HeaderCell = CreateHeaderCell(), DefaultCellStyle = CreateDefaultCellStyle() });
                     historyDataGrid.Columns.Add(new DataGridViewTextBoxColumn { Name = "Profit", HeaderText = "Profit", DataPropertyName = "Profit", SortMode = DataGridViewColumnSortMode.Programmatic, MinimumWidth = CommonHelper.GetScaled(120), DefaultCellStyle = CreateDefaultCellStyle() });
-                    historyDataGrid.Columns.Add(new DataGridViewTextBoxColumn { Name = "Comment", HeaderText = "Comment", DataPropertyName = "Comment", SortMode = DataGridViewColumnSortMode.Programmatic, MinimumWidth = CommonHelper.GetScaled(130) });
+                    // Comment Column Removed
                     break;
             }
             historyDataGrid.Visible = true;
@@ -449,12 +456,19 @@ namespace TraderApp.UI.Usercontrol
         {
             try
             {
+                // LOG REQUEST START
+                FileLogger.Log("History", $"Requesting Data for {lblHistory.Text} (From: {FromDate.Value.ToShortDateString()} To: {ToDate.Value.ToShortDateString()})");
+
                 btnrequest.Enabled = false;
                 if (_historyLoadingTask != null) await _historyLoadingTask;
 
                 if (historyDataGrid != null)
                 {
                     await ReloadDataFromService(lblHistory.Text);
+
+                    // LOG SUCCESS
+                    int recordCount = (lblHistory.Text != "Position") ? (_History?.Count ?? 0) : (_PositionHistory?.Count ?? 0);
+                    FileLogger.Log("History", $"Data Loaded Successfully. Total Records: {recordCount}");
 
                     if (lblHistory.Text != "Position")
                         BindHistoryDataToGrid(_History, lblHistory.Text);
@@ -474,6 +488,7 @@ namespace TraderApp.UI.Usercontrol
             }
             catch (Exception ex)
             {
+                FileLogger.Log("History", $"Error loading data: {ex.Message}");
                 Console.WriteLine("Error loading history: " + ex.Message);
             }
             finally
@@ -546,7 +561,10 @@ namespace TraderApp.UI.Usercontrol
 
             bool hasRealData = grid.Rows.Cast<DataGridViewRow>().Any(r => Convert.ToString(r.Cells["Symbol"].Value) != "—");
             int startColIndex = grid.Columns["Time"].Index;
-            int endColIndex = hasRealData ? grid.Columns["Price"].Index : grid.Columns["Comment"].Index;
+
+            // Adjust End Column logic since Comment is removed
+            // If data exists, merge up to Price. If no data, merge up to the last column (Profit)
+            int endColIndex = hasRealData ? grid.Columns["Price"].Index : grid.Columns["Profit"].Index;
 
             grid.Rows[e.RowIndex].DefaultCellStyle.SelectionBackColor = ThemeManager.Gray;
             grid.Rows[e.RowIndex].DefaultCellStyle.BackColor = ThemeManager.Gray;
@@ -689,7 +707,7 @@ namespace TraderApp.UI.Usercontrol
             dt.Columns.Add("Price", typeof(decimal));
             dt.Columns.Add("Comm", typeof(string));
             dt.Columns.Add("Profit", typeof(string));
-            dt.Columns.Add("Comment", typeof(string));
+            // Comment Column Removed
 
             foreach (var h in historyList)
             {
@@ -706,8 +724,7 @@ namespace TraderApp.UI.Usercontrol
                     h.volume,
                     h.price.ToString("F2") ?? "",
                     h.uplineCommission,
-                    CommonHelper.FormatAmount(h.pnl),
-                    h.comment ?? ""
+                    CommonHelper.FormatAmount(h.pnl)
                 );
             }
             return dt;
@@ -781,7 +798,7 @@ namespace TraderApp.UI.Usercontrol
             dt.Columns.Add("Price", typeof(decimal));
             dt.Columns.Add("Comm", typeof(string));
             dt.Columns.Add("Profit", typeof(string));
-            dt.Columns.Add("Comment", typeof(string));
+            // Comment Column Removed
 
             foreach (var h in positionHistoryList)
             {
@@ -798,8 +815,7 @@ namespace TraderApp.UI.Usercontrol
                     h.SymbolName ?? "",
                     h.AveragePrice.ToString("F" + h.SymbolDigit.ToString()) ?? "",
                     "",
-                    CommonHelper.FormatAmount(h.Pnl),
-                    h.Comment ?? ""
+                    CommonHelper.FormatAmount(h.Pnl)
                 );
             }
             return dt;

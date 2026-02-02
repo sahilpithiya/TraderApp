@@ -1298,7 +1298,7 @@ namespace TraderApp.UI.Usercontrol
 
         private async Task UpdateVisibleSymbolsAsync()
         {
-            if (_isUpdatingSymbols)
+            if (_isUpdatingSymbols || _signalRManager == null)
             {
                 _updatePending = true;
                 return;
