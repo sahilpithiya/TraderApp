@@ -77,7 +77,7 @@ namespace TraderApps.Services
                 return (true, "Success", result.data);
             }
 
-            return (false, result?.successMessage ?? "Login Failed", null);
+            return (false, result?.successMessage ?? ((Newtonsoft.Json.Linq.JProperty)((Newtonsoft.Json.Linq.JContainer)result.exception).Last).Value.ToString() ?? "Login Failed", null);
         }
 
         public async Task<AuthResponseObj> GetUserProfileAsync()

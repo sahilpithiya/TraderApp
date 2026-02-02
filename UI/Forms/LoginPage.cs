@@ -122,7 +122,7 @@ namespace TraderApps.Forms
                 {
                     // 🛑 LOGIN FAILED (Wrong Pass/Server Logic): Log it but don't stop
                     isValidated = result.Message;
-                    FileLogger.Log("Network", $"{result.Message}");
+                    FileLogger.Log("Network", $"Login failed: {result.Message}");
 
                     return false;
                 }

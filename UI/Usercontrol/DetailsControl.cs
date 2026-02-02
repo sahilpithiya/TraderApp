@@ -265,6 +265,9 @@ namespace TraderApp.UI.Usercontrol
             AddMenuItem("Orders", OnOrders_Click, isCheckable: true);
             contextMenu.Items.Add(new ToolStripSeparator());
             AddMenuItem("Position", OnPosition_Click, isCheckable: true);
+
+            // Assign to DataGridView
+            historyDataGrid.ContextMenuStrip = contextMenu;
         }
 
         private void ReceiveJournalLog(string time, string source, string message)
