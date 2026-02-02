@@ -96,7 +96,6 @@ namespace TraderApps.UI.Forms
             if (!System.Net.NetworkInformation.NetworkInterface.GetIsNetworkAvailable())
             {
                 FileLogger.Log("Network", "No Internet Connection detected at startup.");
-                ShowLoginForm();
                 return;
             }
 
@@ -108,7 +107,6 @@ namespace TraderApps.UI.Forms
             {
                 if (existingUser != null)
                 {
-                    // Case 2: Remember Me (Auto Login)
                     if (!string.IsNullOrEmpty(existingUser.Password))
                     {
                         LoginPage loginPage = new LoginPage();
@@ -116,7 +114,6 @@ namespace TraderApps.UI.Forms
 
                         if (loginSuccessful)
                         {
-                            // Login validate ho gaya -> Finalize setup
                             using (var popup = loginPage)
                             {
                                 await PerformPostLoginSetup(popup);
@@ -129,7 +126,6 @@ namespace TraderApps.UI.Forms
                     }
                     else
                     {
-                        // Case 1: Not Remembered -> Show Login Form (MarketWatch already visible in bg)
                         ShowLoginForm();
                     }
                 }
@@ -143,7 +139,6 @@ namespace TraderApps.UI.Forms
         private async Task PerformPostLoginSetup(LoginPage popup = null)
         {
             await PreloadUserControlsAsync();
-
             bool disclaimerAcknowledged = await ShowDisclaimerAndCheckAsync();
             if (disclaimerAcknowledged)
             {
@@ -168,8 +163,6 @@ namespace TraderApps.UI.Forms
                 ShowLoginForm();
                 return;
             }
-
-            // 6. UI Update: Login Validate ho gaya, ab API se naya data leke silently update karo
             InitializeAfterLogin(popup);
         }
 
@@ -178,11 +171,10 @@ namespace TraderApps.UI.Forms
             using (var popup = new LoginPage())
             {
                 ThemeManager.AdjustLoginSize(popup, this);
-                var result = popup.ShowDialog(this); // Modal Dialog
+                var result = popup.ShowDialog(this);
 
                 if (result == DialogResult.OK)
                 {
-                    // User ne credentials dale aur LoginAsync success hua
                     await PerformPostLoginSetup(popup);
                 }
             }
@@ -200,7 +192,6 @@ namespace TraderApps.UI.Forms
         #region Post Login Initialization
         private async void InitializeAfterLogin(LoginPage popup)
         {
-            // UI Header updates
             toolStripDropDownUserButton.Text = SessionManager.UserId;
             disconnectToolStripMenuItem.Text = "Disconnect";
             disconnectToolStripMenuItem.Image = TraderApp.Properties.Resources.disconnectednew;
@@ -217,20 +208,16 @@ namespace TraderApps.UI.Forms
             dockPanel.SuspendLayout(true);
             try
             {
-                // Ensure controls exist
                 if (_detailsUC == null || _detailsUC.IsDisposed) _detailsUC = new DetailsControl();
                 if (_marketWatchControl == null || _marketWatchControl.IsDisposed) _marketWatchControl = new MarketWatchControl();
 
-                // Token check for Full Access
                 if (!string.IsNullOrEmpty(SessionManager.Token))
                 {
                     _detailsUC.EnableFullAccess();
                     _detailsUC.LoadData();
                     FileLogger.Log("System", "Login Successful. Full Access Enabled.");
 
-                    // ✅ CRITICAL: Sync Market Watch with API (Silent Update)
-                    // Abhi tak local data dikh raha tha, ab API se fresh data aayega
-                    await _marketWatchControl.LoadDataAsync(true); // forceApiSync = true
+                    await _marketWatchControl.LoadDataAsync(true, true);
                 }
                 else
                 {
@@ -238,8 +225,8 @@ namespace TraderApps.UI.Forms
                     FileLogger.Log("System", "Restricted Mode.");
                 }
 
-                UpdatePanelContent("Details", _detailsUC);
-                UpdatePanelContent("Market Watch", _marketWatchControl);
+                //UpdatePanelContent("Details", _detailsUC);
+                //UpdatePanelContent("Market Watch", _marketWatchControl);
 
                 EnsurePanelsVisible();
             }
@@ -252,7 +239,7 @@ namespace TraderApps.UI.Forms
             this.Show();
         }
 
-        private void ShowPreLoginLayout()
+        private void ShowPreLoginLayout(bool disconnected = false)
         {
             this.SuspendLayout();
             dockPanel.SuspendLayout(true);
@@ -263,13 +250,9 @@ namespace TraderApps.UI.Forms
                 if (_detailsUC == null || _detailsUC.IsDisposed) _detailsUC = new DetailsControl();
                 if (_marketWatchControl == null || _marketWatchControl.IsDisposed) _marketWatchControl = new MarketWatchControl();
 
-                // Pre-Login Mode (Hide history)
                 _detailsUC.SetupPreLoginMode();
 
-                // ✅ Initial Load: Only Local Data (No API call yet)
-                // MarketWatchControl constructor does NOT auto-load anymore to give us control.
-                // Call LoadDataAsync(false) -> Loads from FileRepository ("symbol" key)
-                _ = _marketWatchControl.LoadDataAsync(false);
+                _ = _marketWatchControl.LoadDataAsync(false, false, disconnected);
 
                 UpdatePanelContent("Market Watch", _marketWatchControl);
                 UpdatePanelContent("Details", _detailsUC);
@@ -488,13 +471,17 @@ namespace TraderApps.UI.Forms
                 return;
             }
 
-            if (disconnectToolStripMenuItem.Text != "Connect" || IsComeFromSocket)
+            if (disconnectToolStripMenuItem.Text != "Connect")
             {
                 _isUserControlsPreloaded = false;
+                this.Text = string.Empty;
+                toolStripDropDownUserButton.Text = "";
+                disconnectToolStripMenuItem.Text = "Connect";
+                disconnectToolStripMenuItem.Image = TraderApp.Properties.Resources.connected;
                 SessionManager.ClearSession();
                 FileLogger.Log("System", "User Disconnected.");
 
-                ShowPreLoginLayout();
+                ShowPreLoginLayout(true);
             }
             ShowLoginForm();
         }

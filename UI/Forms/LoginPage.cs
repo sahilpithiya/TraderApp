@@ -93,10 +93,12 @@ namespace TraderApps.Forms
             try
             {
                 // ✅ Try Login. Even if fails, we proceed (Offline/Restricted Mode)
-                await LoginAsync(userId, password, licenseId, checkBox1.Checked);
+                bool success = await LoginAsync(userId, password, licenseId, checkBox1.Checked);
 
-                // ✅ ALWAYS Return OK to close dialog and enter Home
-                this.DialogResult = DialogResult.OK;
+                if (success)
+                {
+                    this.DialogResult = DialogResult.OK;
+                }
                 this.Close();
             }
             finally
@@ -120,11 +122,9 @@ namespace TraderApps.Forms
                 {
                     // 🛑 LOGIN FAILED (Wrong Pass/Server Logic): Log it but don't stop
                     isValidated = result.Message;
-                    FileLogger.Log("Network", $"Login Failed: {result.Message}");
+                    FileLogger.Log("Network", $"{result.Message}");
 
-                    // Return TRUE so form closes, but Session Token remains EMPTY.
-                    // Home.cs checks Token to decide if history should be enabled.
-                    return true;
+                    return false;
                 }
 
                 // ✅ LOGIN SUCCESS
@@ -159,9 +159,8 @@ namespace TraderApps.Forms
             }
             catch (Exception ex)
             {
-                // 🛑 NETWORK/CRASH ERROR: Log it and Proceed in Restricted Mode
                 FileLogger.Log("Network", $"Login Exception: {ex.Message}");
-                return true; // Proceed to Home in Restricted Mode
+                return false; 
             }
         }
 

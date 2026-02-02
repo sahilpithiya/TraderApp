@@ -87,30 +87,48 @@ namespace TraderApp.UI.Usercontrol
 
         #region Public Methods for Home.cs
 
-        public async Task LoadDataAsync(bool forceApiSync = false)
+        public async Task LoadDataAsync(bool forceApiSync = false, bool startSignalR = false, bool disconnected = false)
         {
             try
             {
-                var marketWatchData = await _marketWatchService.GetMarketWatchDataAsync(forceApiSync);
-
-                if (marketWatchData?.symbols == null || marketWatchData.symbols.Count == 0)
+                if (!disconnected)
                 {
-                    FileLogger.Log("MarketWatch", "No data found (Local or API).");
-                    return;
+                    var marketWatchData = await _marketWatchService.GetMarketWatchDataAsync(forceApiSync);
+
+                    if (marketWatchData?.symbols == null || marketWatchData.symbols.Count == 0)
+                    {
+                        FileLogger.Log("MarketWatch", "No data found (Local or API).");
+                        if (_bindingList == null)
+                        {
+                            if (this.InvokeRequired) this.Invoke(new Action(() =>
+                            {
+                                _bindingList = new BindingList<MarketWatchSymbols>();
+                                dgvMarketWatchGrid.DataSource = _bindingList;
+                                EnsureEmptyRow();
+                            }));
+                        }
+                        return;
+                    }
+
+                    if (this.InvokeRequired)
+                    {
+                        this.Invoke(new Action(() => UpdateGridData(marketWatchData)));
+                    }
+                    else
+                    {
+                        UpdateGridData(marketWatchData);
+                    }
                 }
 
-                if (this.InvokeRequired)
+                if (startSignalR && System.Net.NetworkInformation.NetworkInterface.GetIsNetworkAvailable())
                 {
-                    this.Invoke(new Action(() => UpdateGridData(marketWatchData)));
-                }
-                else
-                {
-                    UpdateGridData(marketWatchData);
-                }
-
-                if (System.Net.NetworkInformation.NetworkInterface.GetIsNetworkAvailable())
-                {
+                    _currentVisibleSymbols.Clear();
                     await InitSignalRAsync();
+                }
+                else if (!startSignalR && _signalRManager != null)
+                {
+                    await _signalRManager.StopAsync();
+                    await _signalRManager.DisposeAsync();
                 }
             }
             catch (Exception ex)
@@ -121,25 +139,49 @@ namespace TraderApp.UI.Usercontrol
 
         private void UpdateGridData(MarketWatchData marketWatchData)
         {
-            removedRows.Clear();
-            SessionManager.SymbolNameList = marketWatchData.symbols.ToList();
+            try
+            {
+                removedRows.Clear();
+                SessionManager.SymbolNameList = marketWatchData.symbols.ToList();
 
-            var visibleSymbols = ProcessApiSymbols(marketWatchData.symbols);
+                var newSymbolsList = ProcessApiSymbols(marketWatchData.symbols);
 
-            _bindingList = new BindingList<MarketWatchSymbols>(visibleSymbols);
-            dgvMarketWatchGrid.DataSource = _bindingList;
 
-            SetupGrid(marketWatchData);
+                if (_bindingList == null)
+                {
+                    _bindingList = new BindingList<MarketWatchSymbols>(newSymbolsList);
+                    dgvMarketWatchGrid.DataSource = _bindingList;
+                }
+                else
+                {
+                    _bindingList.RaiseListChangedEvents = false;
+
+                    _bindingList.Clear();
+
+                    foreach (var item in newSymbolsList)
+                    {
+                        _bindingList.Add(item);
+                    }
+
+                    _bindingList.RaiseListChangedEvents = true;
+                    _bindingList.ResetBindings();
+                }
+
+                SetupGrid(marketWatchData);
+
+                EnsureEmptyRow();
+
+                ApplyColumnVisibility(marketWatchData.displayColumnNames != null ? marketWatchData.displayColumnNames as string : null);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine("Update Grid Error: " + ex.Message);
+            }
         }
 
         #endregion
 
         #region Load Init Data
-
-        private async void LoadInitData()
-        {
-            await LoadDataAsync(false);
-        }
 
         private List<MarketWatchSymbols> ProcessApiSymbols(List<MarketWatchApiSymbol> apiSymbols)
         {
@@ -1146,6 +1188,15 @@ namespace TraderApp.UI.Usercontrol
         {
             try
             {
+                if (string.IsNullOrEmpty(SessionManager.Token)) return;
+
+                if (!System.Net.NetworkInformation.NetworkInterface.GetIsNetworkAvailable()) return;
+
+                if (_signalRManager != null)
+                {
+                    await _signalRManager.StopAsync();
+                }
+
                 _signalRManager = new SignalRManager(AppConfig.MarketWatchSignalRUrl.ToReplaceUrl("sglr"));
 
                 _signalRManager.OnMessageReceived += (data) =>
