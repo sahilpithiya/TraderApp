@@ -122,7 +122,10 @@ namespace TraderApp.UI.Usercontrol
 
                 if (startSignalR && System.Net.NetworkInformation.NetworkInterface.GetIsNetworkAvailable())
                 {
+                    _tickQueue = new ConcurrentQueue<MarketWatchSymbols>();
                     _currentVisibleSymbols.Clear();
+                    _signalRManager = null;
+                    _isUpdatingSymbols = false;
                     await InitSignalRAsync();
                 }
                 else if (!startSignalR && _signalRManager != null)
