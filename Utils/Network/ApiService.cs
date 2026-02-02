@@ -78,6 +78,23 @@ namespace TraderApp.Utils.Network
             catch { return default; }
         }
 
+        public async Task<HttpResponseMessage> PostRawAsync(string url, HttpContent content)
+        {
+            try
+            {
+                _http.AddAuthHeader();
+                return await _http.PostAsync(url, content);
+            }
+            catch
+            {
+                // Return a basic error response if connection fails completely
+                return new HttpResponseMessage(System.Net.HttpStatusCode.ServiceUnavailable)
+                {
+                    ReasonPhrase = "Service Unavailable / Connection Failed"
+                };
+            }
+        }
+
         public async Task<T> PutAsync<T>(string url, object data)
         {
             try

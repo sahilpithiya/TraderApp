@@ -221,6 +221,7 @@
     <Compile Include="Interfaces\IRepository.cs" />
     <Compile Include="Services\ClientService.cs" />
     <Compile Include="Services\MarketWatchService.cs" />
+    <Compile Include="Services\DetailService.cs" />
     <Compile Include="UI\Theme\DesignTimeHelper.cs" />
     <Compile Include="Helpers\SessionManager.cs" />
     <Compile Include="Models\AuthResponse.cs" />
