@@ -1,6 +1,6 @@
 <Solution>
-  <Project Path="../TraderAppSetup/TraderAppSetup.vdproj" Type="Installer">
+  <Project Path="TraderApp.csproj" Id="285e3f8b-2023-4a40-a971-4005ba489028" />
+  <Project Path="TraderAppSetup/TraderAppSetup.vdproj" Type="Installer">
     <Build />
   </Project>
-  <Project Path="TraderApp.csproj" Id="285e3f8b-2023-4a40-a971-4005ba489028" />
 </Solution>
